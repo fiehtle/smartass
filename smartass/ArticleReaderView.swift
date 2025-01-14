@@ -1,3 +1,11 @@
+//
+//  ArticleReaderView.swift
+//  smartass
+//
+//  Created by Viet Le on 1/14/25.
+//
+
+
 import SwiftUI
 
 struct ArticleReaderView: View {
