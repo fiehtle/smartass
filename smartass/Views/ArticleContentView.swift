@@ -1,18 +1,37 @@
-import SwiftUI
-import WebKit
+//
+//  ArticleContentView.swift
+//  smartass
+//
+//  Created by Viet Le on 1/14/25.
+//
 
-struct ArticleContentView: UIViewRepresentable {
+
+import SwiftUI
+
+struct ArticleContentView: View {
     let htmlContent: String
     
-    func makeUIView(context: Context) -> WKWebView {
-        let webView = WKWebView()
-        webView.backgroundColor = .clear
-        webView.isOpaque = false
-        webView.scrollView.isScrollEnabled = false
-        return webView
+    var body: some View {
+        ArticleTextView(htmlContent: htmlContent)
+            .frame(maxWidth: .infinity)
+    }
+}
+
+struct ArticleTextView: UIViewRepresentable {
+    let htmlContent: String
+    
+    func makeUIView(context: Context) -> UITextView {
+        let textView = UITextView()
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.backgroundColor = .clear
+        textView.textContainerInset = UIEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
+        textView.textContainer.lineFragmentPadding = 0
+        textView.font = .preferredFont(forTextStyle: .body)
+        return textView
     }
     
-    func updateUIView(_ webView: WKWebView, context: Context) {
+    func updateUIView(_ textView: UITextView, context: Context) {
         let htmlTemplate = """
         <!DOCTYPE html>
         <html>
@@ -20,23 +39,13 @@ struct ArticleContentView: UIViewRepresentable {
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <style>
                 body {
-                    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+                    font-family: -apple-system;
                     font-size: 17px;
                     line-height: 1.6;
-                    color: #000;
                     margin: 0;
                     padding: 0;
                 }
-                img {
-                    max-width: 100%;
-                    height: auto;
-                }
-                @media (prefers-color-scheme: dark) {
-                    body {
-                        color: #fff;
-                        background-color: transparent;
-                    }
-                }
+                img { max-width: 100%; height: auto; }
             </style>
         </head>
         <body>
@@ -45,6 +54,18 @@ struct ArticleContentView: UIViewRepresentable {
         </html>
         """
         
-        webView.loadHTMLString(htmlTemplate, baseURL: nil)
+        if let data = htmlTemplate.data(using: .utf8),
+           let attributedString = try? NSAttributedString(
+            data: data,
+            options: [
+                .documentType: NSAttributedString.DocumentType.html,
+                .characterEncoding: String.Encoding.utf8.rawValue
+            ],
+            documentAttributes: nil) {
+            
+            DispatchQueue.main.async {
+                textView.attributedText = attributedString
+            }
+        }
     }
 } 

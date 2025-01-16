@@ -6,13 +6,31 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		3504C5752D37B808001C3EEE /* WebKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3504C5742D37B808001C3EEE /* WebKit.framework */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		3504C54A2D368C9F001C3EEE /* smartass.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = smartass.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		3504C5742D37B808001C3EEE /* WebKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WebKit.framework; path = System/Library/Frameworks/WebKit.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		3504C5722D37B746001C3EEE /* Exceptions for "smartass" folder in "smartass" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 3504C5492D368C9F001C3EEE /* smartass */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		3504C54C2D368C9F001C3EEE /* smartass */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				3504C5722D37B746001C3EEE /* Exceptions for "smartass" folder in "smartass" target */,
+			);
 			path = smartass;
 			sourceTree = "<group>";
 		};
@@ -23,6 +41,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3504C5752D37B808001C3EEE /* WebKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -33,6 +52,7 @@
 			isa = PBXGroup;
 			children = (
 				3504C54C2D368C9F001C3EEE /* smartass */,
+				3504C5732D37B808001C3EEE /* Frameworks */,
 				3504C54B2D368C9F001C3EEE /* Products */,
 			);
 			sourceTree = "<group>";
@@ -43,6 +63,14 @@
 				3504C54A2D368C9F001C3EEE /* smartass.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		3504C5732D37B808001C3EEE /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				3504C5742D37B808001C3EEE /* WebKit.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -255,6 +283,8 @@
 				DEVELOPMENT_TEAM = 86R8747VJY;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = smartass/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -284,6 +314,8 @@
 				DEVELOPMENT_TEAM = 86R8747VJY;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = smartass/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
