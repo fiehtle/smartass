@@ -48,34 +48,13 @@ class SafariReaderMode {
         // Add Readability script
         let script = WKUserScript(
             source: readabilityJS,
-            injectionTime: .atDocumentStart,
+            injectionTime: .atDocumentEnd,
             forMainFrameOnly: true
         )
         controller.addUserScript(script)
     }
     
     private let readabilityJS = #"""
-        // First add helper functions that Readability.js expects
-        function isProbablyReaderable(doc) {
-            // Return true if this document looks like it has interesting content
-            return true;
-        }
-        
-        function getReadTime(doc) {
-            return 5; // Default 5 min read time
-        }
-        
-        // Add console logging for debugging
-        console = {
-            log: function(msg) { 
-                window.webkit.messageHandlers.logging.postMessage("📝 " + msg);
-            },
-            error: function(msg) {
-                window.webkit.messageHandlers.logging.postMessage("❌ " + msg);
-            }
-        };
-        
-        // Then add Readability
         class Readability {
             constructor(doc) {
                 this.doc = doc;
@@ -83,36 +62,86 @@ class SafariReaderMode {
             
             parse() {
                 try {
-                    // Get article content
-                    let article = this.doc.querySelector('article') || 
-                                this.doc.querySelector('.article') ||
-                                this.doc.querySelector('.post') ||
-                                this.doc.querySelector('main') ||
-                                this.doc.body;
-                                
-                    // Get title
-                    let title = this.doc.querySelector('h1')?.textContent ||
-                              this.doc.querySelector('title')?.textContent ||
-                              'Untitled';
-                              
-                    // Get metadata
-                    let byline = this.doc.querySelector('meta[name="author"]')?.content;
-                    let excerpt = this.doc.querySelector('meta[name="description"]')?.content;
-                    let siteName = this.doc.querySelector('meta[property="og:site_name"]')?.content;
+                    // First try general purpose parsing
+                    let article = this.findMainContent();
+                    if (article) {
+                        return this.createResult(article);
+                    }
                     
-                    return {
-                        title: title.trim(),
-                        content: article.innerHTML,
-                        textContent: article.textContent.trim(),
-                        byline: byline,
-                        excerpt: excerpt,
-                        siteName: siteName,
-                        length: article.textContent.trim().length
-                    };
+                    // If that fails, try site-specific rules
+                    if (window.location.hostname.includes('paulgraham.com')) {
+                        return this.parsePaulGraham();
+                    }
+                    
+                    throw new Error("Could not parse article");
                 } catch (e) {
-                    console.error('Parsing error: ' + e.message);
-                    return null;
+                    console.error("Parsing error:", e);
+                    throw e;
                 }
+            }
+            
+            findMainContent() {
+                // Try common article containers first
+                const candidates = [
+                    this.doc.querySelector('article'),
+                    this.doc.querySelector('[role="article"]'),
+                    this.doc.querySelector('main'),
+                    this.doc.querySelector('.post-content'),
+                    this.doc.querySelector('.article-content')
+                ].filter(Boolean); // Remove null values
+                
+                for (const candidate of candidates) {
+                    if (this.isValidArticle(candidate)) {
+                        return candidate;
+                    }
+                }
+                
+                return null; // Will trigger site-specific parsing
+            }
+            
+            isValidArticle(element) {
+                if (!element) return false;
+                
+                // Check if it has enough text content
+                const text = element.textContent || '';
+                if (text.length < 140) return false; // Too short
+                
+                // Check text to link ratio
+                const links = element.getElementsByTagName('a');
+                const linkText = Array.from(links).reduce((acc, link) => acc + (link.textContent || '').length, 0);
+                const textRatio = linkText / text.length;
+                if (textRatio > 0.5) return false; // Too many links
+                
+                return true;
+            }
+            
+            parsePaulGraham() {
+                const contentDiv = this.doc.querySelector('#caption');
+                if (!contentDiv) {
+                    throw new Error("Could not find content div");
+                }
+                
+                return {
+                    title: this.doc.title || 'Untitled',
+                    content: contentDiv.innerHTML,
+                    textContent: contentDiv.textContent,
+                    byline: 'Paul Graham',
+                    excerpt: null,
+                    siteName: 'paulgraham.com',
+                    length: contentDiv.textContent.length
+                };
+            }
+            
+            createResult(article) {
+                return {
+                    title: this.doc.title || 'Untitled',
+                    content: article.innerHTML,
+                    textContent: article.textContent,
+                    byline: this.doc.querySelector('meta[name="author"]')?.content || null,
+                    excerpt: this.doc.querySelector('meta[name="description"]')?.content || null,
+                    siteName: this.doc.querySelector('meta[property="og:site_name"]')?.content || null,
+                    length: article.textContent.length
+                };
             }
         }
     """#
@@ -174,39 +203,46 @@ private class LoadDelegate: NSObject, WKNavigationDelegate {
     }
     
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        print("🌐 WebView: Page load finished")
         Task { @MainActor in
             do {
-                // Wait for page to load
-                try await Task.sleep(nanoseconds: 1_000_000_000)
+                print("🌐 WebView: Starting JavaScript evaluation")
+                
+                // First let's check what we're working with
+                let documentHTML = try await webView.evaluateJavaScript("""
+                    document.documentElement.outerHTML
+                """) as? String
+                print("🌐 WebView: Document HTML:", documentHTML ?? "nil")
                 
                 let result = try await webView.evaluateJavaScript("""
-                    try {
-                        let article = new Readability(document).parse();
-                        if (!article) {
-                            console.error('No article found');
-                            throw new Error('No article found');
-                        }
-                        console.log('Article found:', article.title);
-                        JSON.stringify(article);
-                    } catch (e) {
-                        console.error('Parsing error:', e);
-                        throw e;
-                    }
-                """) as? String
+                    (() => {
+                        console.log("Starting Readability parse");
+                        const reader = new Readability(document);
+                        const result = reader.parse();
+                        console.log("Parse result:", result);
+                        return result;
+                    })()
+                """) as? [String: Any]
                 
-                guard let result = result,
-                      let data = result.data(using: .utf8),
-                      let article = try? JSONDecoder().decode(SafariReaderMode.ReaderResult.self, from: data) else {
-                    print("❌ Failed to decode result")
-                    complete(with: .failure(SafariReaderMode.ReaderError.parsingFailed))
-                    return
+                print("🌐 WebView: JavaScript result:", result ?? "nil")
+                
+                guard let result = result else {
+                    throw SafariReaderMode.ReaderError.parsingFailed
                 }
                 
-                print("✅ Successfully parsed article: \(article.title)")
-                complete(with: .success(article))
+                // Convert to ReaderResult
+                let readerResult = SafariReaderMode.ReaderResult(
+                    title: result["title"] as? String ?? "",
+                    content: result["content"] as? String ?? "",
+                    textContent: result["textContent"] as? String ?? "",
+                    byline: result["byline"] as? String,
+                    excerpt: result["excerpt"] as? String,
+                    siteName: result["siteName"] as? String,
+                    length: result["length"] as? Int ?? 0
+                )
                 
+                complete(with: .success(readerResult))
             } catch {
-                print("❌ JavaScript error: \(error)")
                 complete(with: .failure(SafariReaderMode.ReaderError.parsingFailed))
             }
         }
