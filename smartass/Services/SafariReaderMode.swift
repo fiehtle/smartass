@@ -62,17 +62,14 @@ class SafariReaderMode {
             
             parse() {
                 try {
-                    // First try general purpose parsing
-                    let article = this.findMainContent();
+                    // Try different content finding strategies in order
+                    const article = 
+                        this.findByMainContent() ||
+                        this.findByTextDensity() ||
+                        this.findByDynamicContent();
+                    
                     if (article) {
                         return this.createResult(article);
-                    }
-                    
-                    // If that fails, try site-specific rules
-                    if (window.location.hostname.includes('paulgraham.com')) {
-                        return this.parsePaulGraham();
-                    } else if (window.location.hostname.includes('stripe.press')) {
-                        return this.parseStripePress();
                     }
                     
                     throw new Error("Could not parse article");
@@ -82,86 +79,106 @@ class SafariReaderMode {
                 }
             }
             
-            findMainContent() {
-                // Try common article containers first
+            findByMainContent() {
+                // Try common article containers and semantic HTML
                 const candidates = [
                     this.doc.querySelector('article'),
                     this.doc.querySelector('[role="article"]'),
                     this.doc.querySelector('main'),
                     this.doc.querySelector('.post-content'),
                     this.doc.querySelector('.article-content'),
-                    this.doc.querySelector('[data-text-content]') // Add Stripe Press selector
+                    this.doc.querySelector('.content'),
+                    this.doc.querySelector('#content')
                 ].filter(Boolean);
                 
-                for (const candidate of candidates) {
-                    if (this.isValidArticle(candidate)) {
-                        return candidate;
-                    }
-                }
+                return candidates.find(this.isValidArticle.bind(this));
+            }
+            
+            findByTextDensity() {
+                // Find the element with the highest text-to-markup ratio
+                const body = this.doc.body;
+                if (!body) return null;
                 
-                return null;
+                let bestElement = null;
+                let bestScore = 0;
+                
+                const walk = (node) => {
+                    if (node.nodeType === Node.ELEMENT_NODE) {
+                        const text = node.textContent || '';
+                        const markup = node.innerHTML || '';
+                        if (text.length > 140) { // Minimum text threshold
+                            const score = text.length / markup.length;
+                            if (score > bestScore) {
+                                bestScore = score;
+                                bestElement = node;
+                            }
+                        }
+                        Array.from(node.children).forEach(walk);
+                    }
+                };
+                
+                walk(body);
+                return bestElement;
+            }
+            
+            findByDynamicContent() {
+                // Look for elements that might contain dynamic content
+                const candidates = [
+                    // Data attributes often used for dynamic content
+                    ...Array.from(this.doc.querySelectorAll('[data-content]')),
+                    ...Array.from(this.doc.querySelectorAll('[data-text-content]')),
+                    ...Array.from(this.doc.querySelectorAll('[data-article]')),
+                    
+                    // Common dynamic content containers
+                    ...Array.from(this.doc.querySelectorAll('.dynamic-content')),
+                    ...Array.from(this.doc.querySelectorAll('.lazy-content')),
+                    
+                    // Find elements with substantial text content
+                    ...Array.from(this.doc.querySelectorAll('*')).filter(el => {
+                        const text = el.textContent || '';
+                        return text.length > 1000; // Substantial text threshold
+                    })
+                ];
+                
+                return candidates.find(this.isValidArticle.bind(this));
             }
             
             isValidArticle(element) {
                 if (!element) return false;
                 
-                // Check if it has enough text content
                 const text = element.textContent || '';
                 if (text.length < 140) return false; // Too short
                 
+                // Check text to markup ratio
+                const markup = element.innerHTML || '';
+                const textDensity = text.length / markup.length;
+                if (textDensity < 0.2) return false; // Too much markup
+                
                 // Check text to link ratio
                 const links = element.getElementsByTagName('a');
-                const linkText = Array.from(links).reduce((acc, link) => acc + (link.textContent || '').length, 0);
+                const linkText = Array.from(links).reduce((acc, link) => 
+                    acc + (link.textContent || '').length, 0);
                 const textRatio = linkText / text.length;
                 if (textRatio > 0.5) return false; // Too many links
                 
-                return true;
-            }
-            
-            parsePaulGraham() {
-                const contentDiv = this.doc.querySelector('#caption');
-                if (!contentDiv) {
-                    throw new Error("Could not find content div");
-                }
+                // Check for common article indicators
+                const hasArticleStructure = 
+                    element.querySelector('h1, h2, h3, p') !== null ||
+                    element.matches('article, [role="article"], main, .post-content, .article-content');
                 
-                return {
-                    title: this.doc.title || 'Untitled',
-                    content: contentDiv.innerHTML,
-                    textContent: contentDiv.textContent,
-                    byline: 'Paul Graham',
-                    excerpt: null,
-                    siteName: 'paulgraham.com',
-                    length: contentDiv.textContent.length
-                };
-            }
-            
-            parseStripePress() {
-                // Find all text content sections
-                const sections = Array.from(this.doc.querySelectorAll('[data-text-content]'));
-                if (!sections.length) {
-                    throw new Error("Could not find Stripe Press content sections");
-                }
-                
-                // Create a container for all sections
-                const container = document.createElement('div');
-                sections.forEach(section => {
-                    container.appendChild(section.cloneNode(true));
-                });
-                
-                return {
-                    title: this.doc.title || 'Untitled',
-                    content: container.innerHTML,
-                    textContent: container.textContent,
-                    byline: null,
-                    excerpt: null,
-                    siteName: 'stripe.press',
-                    length: container.textContent.length
-                };
+                return hasArticleStructure;
             }
             
             createResult(article) {
+                // Find the best title
+                const title = 
+                    this.doc.querySelector('h1')?.textContent ||
+                    this.doc.querySelector('meta[property="og:title"]')?.content ||
+                    this.doc.title ||
+                    'Untitled';
+                
                 return {
-                    title: this.doc.title || 'Untitled',
+                    title: title,
                     content: article.innerHTML,
                     textContent: article.textContent,
                     byline: this.doc.querySelector('meta[name="author"]')?.content || null,
