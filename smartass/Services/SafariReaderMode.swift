@@ -11,8 +11,10 @@ import WebKit
 @MainActor
 class SafariReaderMode {
     enum ReaderError: Error {
-        case loadingFailed
-        case parsingFailed
+        case loadingFailed(underlying: Error?)
+        case parsingFailed(reason: String)
+        case timeout
+        case invalidConfiguration
     }
     
     struct ReaderResult: Decodable {
@@ -38,8 +40,8 @@ class SafariReaderMode {
         self.configuration = WKWebViewConfiguration()
         self.controller = WKUserContentController()
         
-        guard let controller = controller,
-              let configuration = configuration else { return }
+        let controller = self.controller!
+        let configuration = self.configuration!
         
         // Add logging handler
         controller.add(LogHandler(), name: "logging")
@@ -191,9 +193,10 @@ class SafariReaderMode {
     """#
     
     func parse(url: URL) async throws -> ReaderResult {
-        try await withCheckedThrowingContinuation { continuation in
+        try Task.checkCancellation()
+        return try await withCheckedThrowingContinuation { continuation in
             guard let configuration = configuration else {
-                continuation.resume(throwing: ReaderError.parsingFailed)
+                continuation.resume(throwing: ReaderError.parsingFailed(reason: "Invalid configuration"))
                 return
             }
             
@@ -235,14 +238,22 @@ private class LoadDelegate: NSObject, WKNavigationDelegate {
     private let continuation: CheckedContinuation<SafariReaderMode.ReaderResult, Error>
     private let cleanup: () -> Void
     private var hasCompleted = false
+    private var timeoutTask: Task<Void, Never>?
     
     init(continuation: CheckedContinuation<SafariReaderMode.ReaderResult, Error>, cleanup: @escaping () -> Void) {
         self.continuation = continuation
         self.cleanup = cleanup
         super.init()
+        
+        // Add timeout
+        timeoutTask = Task {
+            try? await Task.sleep(nanoseconds: 30_000_000_000) // 30 seconds
+            complete(with: .failure(SafariReaderMode.ReaderError.loadingFailed(underlying: nil)))
+        }
     }
     
     private func complete(with result: Result<SafariReaderMode.ReaderResult, Error>) {
+        timeoutTask?.cancel()
         guard !hasCompleted else { return }
         hasCompleted = true
         cleanup()
@@ -295,16 +306,16 @@ private class LoadDelegate: NSObject, WKNavigationDelegate {
                 print("🌐 WebView: JavaScript result:", result ?? "nil")
                 
                 guard let result = result else {
-                    throw SafariReaderMode.ReaderError.parsingFailed
+                    throw SafariReaderMode.ReaderError.parsingFailed(reason: "No result from JavaScript")
                 }
                 
                 if let success = result["success"] as? Bool, !success {
                     print("🌐 WebView: Parsing error:", result["error"] ?? "unknown error")
-                    throw SafariReaderMode.ReaderError.parsingFailed
+                    throw SafariReaderMode.ReaderError.parsingFailed(reason: result["error"] as? String ?? "unknown error")
                 }
                 
                 guard let parseResult = result["result"] as? [String: Any] else {
-                    throw SafariReaderMode.ReaderError.parsingFailed
+                    throw SafariReaderMode.ReaderError.parsingFailed(reason: "No valid result format")
                 }
                 
                 // Convert to ReaderResult
@@ -321,19 +332,19 @@ private class LoadDelegate: NSObject, WKNavigationDelegate {
                 complete(with: .success(readerResult))
             } catch {
                 print("🌐 WebView: Error during parsing:", error)
-                complete(with: .failure(SafariReaderMode.ReaderError.parsingFailed))
+                complete(with: .failure(SafariReaderMode.ReaderError.loadingFailed(underlying: error)))
             }
         }
     }
     
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
         print("❌ Navigation failed: \(error)")
-        complete(with: .failure(SafariReaderMode.ReaderError.loadingFailed))
+        complete(with: .failure(SafariReaderMode.ReaderError.loadingFailed(underlying: error)))
     }
     
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
         print("❌ Provisional navigation failed: \(error)")
-        complete(with: .failure(SafariReaderMode.ReaderError.loadingFailed))
+        complete(with: .failure(SafariReaderMode.ReaderError.loadingFailed(underlying: error)))
     }
 }
 
