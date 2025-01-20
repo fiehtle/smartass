@@ -6,56 +6,66 @@
 //
 
 
+// Import WebKit framework which provides web browsing capabilities
 import WebKit
 
+// @MainActor ensures this class only runs on the main thread, which is required for UI operations
 @MainActor
 class SafariReaderMode {
+    // Define possible errors that can occur during reading mode operations
     enum ReaderError: Error {
+        // Error when page loading fails, with optional underlying error details
         case loadingFailed(underlying: Error?)
+        // Error when content parsing fails, with a reason message
         case parsingFailed(reason: String)
+        // Error when operation takes too long
         case timeout
+        // Error when web configuration is invalid
         case invalidConfiguration
     }
     
+    // Define the structure for the parsed article result
     struct ReaderResult: Decodable {
-        let title: String
-        let content: String
-        let textContent: String
-        let byline: String?
-        let excerpt: String?
-        let siteName: String?
-        let length: Int
+        let title: String       // Article title
+        let content: String     // Full HTML content
+        let textContent: String // Plain text content
+        let byline: String?     // Author information (optional)
+        let excerpt: String?    // Article summary (optional)
+        let siteName: String?   // Website name (optional)
+        let length: Int         // Content length in characters
     }
     
-    // Store webView to prevent deallocation
-    private var webView: WKWebView?
-    private var delegate: LoadDelegate?
+    // Instance properties to maintain state
+    // We need to keep strong references to prevent automatic cleanup
+    private var webView: WKWebView?                    // The web view that loads the page
+    private var delegate: LoadDelegate?                // Handles web view events
+    private var configuration: WKWebViewConfiguration?  // Web view configuration
+    private var controller: WKUserContentController?   // Manages JavaScript injection
     
-    // Add strong reference to configuration and controller
-    private var configuration: WKWebViewConfiguration?
-    private var controller: WKUserContentController?
-    
+    // Initialize the SafariReaderMode
     init() {
-        // Initialize configuration and controller in init
+        // Create new configuration and controller instances
         self.configuration = WKWebViewConfiguration()
         self.controller = WKUserContentController()
         
+        // Force unwrap is safe here since we just created these
         let controller = self.controller!
         let configuration = self.configuration!
         
-        // Add logging handler
+        // Add a handler to receive JavaScript console logs
         controller.add(LogHandler(), name: "logging")
         configuration.userContentController = controller
         
-        // Add Readability script
+        // Inject our Readability JavaScript code when the page loads
         let script = WKUserScript(
             source: readabilityJS,
-            injectionTime: .atDocumentEnd,
-            forMainFrameOnly: true
+            injectionTime: .atDocumentEnd,  // Run after page loads
+            forMainFrameOnly: true          // Only run in main frame, not iframes
         )
         controller.addUserScript(script)
     }
     
+    // JavaScript code that extracts readable content from web pages
     private let readabilityJS = #"""
         class Readability {
             constructor(doc) {
@@ -192,26 +202,33 @@ class SafariReaderMode {
         }
     """#
     
+    // Main function to parse a webpage at the given URL
     func parse(url: URL) async throws -> ReaderResult {
+        // Check if the task has been cancelled
         try Task.checkCancellation()
+        
+        // Use continuation to bridge between async/await and completion handler style
         return try await withCheckedThrowingContinuation { continuation in
+            // Ensure configuration exists
             guard let configuration = configuration else {
                 continuation.resume(throwing: ReaderError.parsingFailed(reason: "Invalid configuration"))
                 return
             }
             
+            // Create a web view with reasonable dimensions
             let webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 1200, height: 800), configuration: configuration)
             self.webView = webView
             
+            // Create and set up the delegate to handle web view events
             let delegate = LoadDelegate(continuation: continuation) { [weak self] in
-                // Cleanup
+                // Cleanup closure to prevent memory leaks
                 self?.webView = nil
                 self?.delegate = nil
             }
             self.delegate = delegate
             webView.navigationDelegate = delegate
             
-            // Create request with browser-like headers
+            // Set up the request with browser-like headers to avoid website blocks
             var request = URLRequest(url: url)
             request.allHTTPHeaderFields = [
                 "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Safari/605.1.15",
@@ -220,13 +237,13 @@ class SafariReaderMode {
                 "Accept-Encoding": "gzip, deflate, br"
             ]
             
-            // Load the URL with the custom headers
+            // Start loading the webpage
             webView.load(request)
         }
     }
     
+    // Clean up resources when this object is destroyed
     deinit {
-        // Clean up
         webView = nil
         delegate = nil
         controller = nil
@@ -234,30 +251,35 @@ class SafariReaderMode {
     }
 }
 
+// Delegate class to handle web view loading events
 private class LoadDelegate: NSObject, WKNavigationDelegate {
+    // Store the continuation to resume async function
     private let continuation: CheckedContinuation<SafariReaderMode.ReaderResult, Error>
     private let cleanup: () -> Void
     private var hasCompleted = false
     private var timeoutTask: Task<Void, Never>?
     
+    // Initialize the delegate
     init(continuation: CheckedContinuation<SafariReaderMode.ReaderResult, Error>, cleanup: @escaping () -> Void) {
         self.continuation = continuation
         self.cleanup = cleanup
         super.init()
         
-        // Add timeout
+        // Set up timeout task
         timeoutTask = Task {
             try? await Task.sleep(nanoseconds: 30_000_000_000) // 30 seconds
             complete(with: .failure(SafariReaderMode.ReaderError.loadingFailed(underlying: nil)))
         }
     }
     
+    // Helper function to complete the operation exactly once
     private func complete(with result: Result<SafariReaderMode.ReaderResult, Error>) {
         timeoutTask?.cancel()
         guard !hasCompleted else { return }
         hasCompleted = true
         cleanup()
         
+        // Resume the async function with success or failure
         switch result {
         case .success(let article):
             continuation.resume(returning: article)
@@ -266,22 +288,20 @@ private class LoadDelegate: NSObject, WKNavigationDelegate {
         }
     }
     
+    // Called when page finishes loading
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         print("🌐 WebView: Page load finished")
         Task { @MainActor in
             do {
-                print("🌐 WebView: Starting JavaScript evaluation")
-                
-                // First check if we can access the document at all
+                // Check if document is accessible
                 let documentReady = try await webView.evaluateJavaScript("""
                     document && document.readyState
                 """) as? String
-                print("🌐 WebView: Document ready state:", documentReady ?? "nil")
                 
-                // Wait for initial load
+                // Wait for any dynamic content to load
                 try await Task.sleep(nanoseconds: 2_000_000_000)
                 
-                // Try to parse with detailed error logging
+                // Run our Readability parser
                 let result = try await webView.evaluateJavaScript("""
                     (() => {
                         try {
@@ -303,22 +323,22 @@ private class LoadDelegate: NSObject, WKNavigationDelegate {
                     })()
                 """) as? [String: Any]
                 
-                print("🌐 WebView: JavaScript result:", result ?? "nil")
-                
+                // Process the JavaScript result
                 guard let result = result else {
                     throw SafariReaderMode.ReaderError.parsingFailed(reason: "No result from JavaScript")
                 }
                 
+                // Check for parsing success
                 if let success = result["success"] as? Bool, !success {
-                    print("🌐 WebView: Parsing error:", result["error"] ?? "unknown error")
                     throw SafariReaderMode.ReaderError.parsingFailed(reason: result["error"] as? String ?? "unknown error")
                 }
                 
+                // Extract the parsed result
                 guard let parseResult = result["result"] as? [String: Any] else {
                     throw SafariReaderMode.ReaderError.parsingFailed(reason: "No valid result format")
                 }
                 
-                // Convert to ReaderResult
+                // Convert JavaScript result to Swift ReaderResult
                 let readerResult = SafariReaderMode.ReaderResult(
                     title: parseResult["title"] as? String ?? "",
                     content: parseResult["content"] as? String ?? "",
@@ -329,30 +349,32 @@ private class LoadDelegate: NSObject, WKNavigationDelegate {
                     length: parseResult["length"] as? Int ?? 0
                 )
                 
+                // Complete successfully with the parsed result
                 complete(with: .success(readerResult))
             } catch {
-                print("🌐 WebView: Error during parsing:", error)
+                // Handle any errors during the process
                 complete(with: .failure(SafariReaderMode.ReaderError.loadingFailed(underlying: error)))
             }
         }
     }
     
+    // Handle navigation failures
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        print("❌ Navigation failed: \(error)")
         complete(with: .failure(SafariReaderMode.ReaderError.loadingFailed(underlying: error)))
     }
     
+    // Handle early navigation failures (like invalid URLs)
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        print("❌ Provisional navigation failed: \(error)")
         complete(with: .failure(SafariReaderMode.ReaderError.loadingFailed(underlying: error)))
     }
 }
 
-// Add logging handler
+// Handler for JavaScript console logs
 private class LogHandler: NSObject, WKScriptMessageHandler {
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        // Print JavaScript console messages to Swift console
         if let msg = message.body as? String {
             print("🌐 WebView: \(msg)")
         }
     }
-} 
+}
