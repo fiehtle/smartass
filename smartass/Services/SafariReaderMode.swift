@@ -71,6 +71,8 @@ class SafariReaderMode {
                     // If that fails, try site-specific rules
                     if (window.location.hostname.includes('paulgraham.com')) {
                         return this.parsePaulGraham();
+                    } else if (window.location.hostname.includes('stripe.press')) {
+                        return this.parseStripePress();
                     }
                     
                     throw new Error("Could not parse article");
@@ -87,8 +89,9 @@ class SafariReaderMode {
                     this.doc.querySelector('[role="article"]'),
                     this.doc.querySelector('main'),
                     this.doc.querySelector('.post-content'),
-                    this.doc.querySelector('.article-content')
-                ].filter(Boolean); // Remove null values
+                    this.doc.querySelector('.article-content'),
+                    this.doc.querySelector('[data-text-content]') // Add Stripe Press selector
+                ].filter(Boolean);
                 
                 for (const candidate of candidates) {
                     if (this.isValidArticle(candidate)) {
@@ -96,7 +99,7 @@ class SafariReaderMode {
                     }
                 }
                 
-                return null; // Will trigger site-specific parsing
+                return null;
             }
             
             isValidArticle(element) {
@@ -132,6 +135,30 @@ class SafariReaderMode {
                 };
             }
             
+            parseStripePress() {
+                // Find all text content sections
+                const sections = Array.from(this.doc.querySelectorAll('[data-text-content]'));
+                if (!sections.length) {
+                    throw new Error("Could not find Stripe Press content sections");
+                }
+                
+                // Create a container for all sections
+                const container = document.createElement('div');
+                sections.forEach(section => {
+                    container.appendChild(section.cloneNode(true));
+                });
+                
+                return {
+                    title: this.doc.title || 'Untitled',
+                    content: container.innerHTML,
+                    textContent: container.textContent,
+                    byline: null,
+                    excerpt: null,
+                    siteName: 'stripe.press',
+                    length: container.textContent.length
+                };
+            }
+            
             createResult(article) {
                 return {
                     title: this.doc.title || 'Untitled',
@@ -153,7 +180,7 @@ class SafariReaderMode {
                 return
             }
             
-            let webView = WKWebView(frame: .zero, configuration: configuration)
+            let webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 1200, height: 800), configuration: configuration)
             self.webView = webView
             
             let delegate = LoadDelegate(continuation: continuation) { [weak self] in
@@ -164,8 +191,17 @@ class SafariReaderMode {
             self.delegate = delegate
             webView.navigationDelegate = delegate
             
-            // Load the URL
-            webView.load(URLRequest(url: url))
+            // Create request with browser-like headers
+            var request = URLRequest(url: url)
+            request.allHTTPHeaderFields = [
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Safari/605.1.15",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.9",
+                "Accept-Encoding": "gzip, deflate, br"
+            ]
+            
+            // Load the URL with the custom headers
+            webView.load(request)
         }
     }
     
@@ -208,19 +244,34 @@ private class LoadDelegate: NSObject, WKNavigationDelegate {
             do {
                 print("🌐 WebView: Starting JavaScript evaluation")
                 
-                // First let's check what we're working with
-                let documentHTML = try await webView.evaluateJavaScript("""
-                    document.documentElement.outerHTML
+                // First check if we can access the document at all
+                let documentReady = try await webView.evaluateJavaScript("""
+                    document && document.readyState
                 """) as? String
-                print("🌐 WebView: Document HTML:", documentHTML ?? "nil")
+                print("🌐 WebView: Document ready state:", documentReady ?? "nil")
                 
+                // Wait for initial load
+                try await Task.sleep(nanoseconds: 2_000_000_000)
+                
+                // Try to parse with detailed error logging
                 let result = try await webView.evaluateJavaScript("""
                     (() => {
-                        console.log("Starting Readability parse");
-                        const reader = new Readability(document);
-                        const result = reader.parse();
-                        console.log("Parse result:", result);
-                        return result;
+                        try {
+                            console.log("Starting Readability parse");
+                            const reader = new Readability(document);
+                            const result = reader.parse();
+                            console.log("Parse result:", result);
+                            return {
+                                success: true,
+                                result: result
+                            };
+                        } catch (error) {
+                            console.error("Parsing error:", error);
+                            return {
+                                success: false,
+                                error: error.toString()
+                            };
+                        }
                     })()
                 """) as? [String: Any]
                 
@@ -230,19 +281,29 @@ private class LoadDelegate: NSObject, WKNavigationDelegate {
                     throw SafariReaderMode.ReaderError.parsingFailed
                 }
                 
+                if let success = result["success"] as? Bool, !success {
+                    print("🌐 WebView: Parsing error:", result["error"] ?? "unknown error")
+                    throw SafariReaderMode.ReaderError.parsingFailed
+                }
+                
+                guard let parseResult = result["result"] as? [String: Any] else {
+                    throw SafariReaderMode.ReaderError.parsingFailed
+                }
+                
                 // Convert to ReaderResult
                 let readerResult = SafariReaderMode.ReaderResult(
-                    title: result["title"] as? String ?? "",
-                    content: result["content"] as? String ?? "",
-                    textContent: result["textContent"] as? String ?? "",
-                    byline: result["byline"] as? String,
-                    excerpt: result["excerpt"] as? String,
-                    siteName: result["siteName"] as? String,
-                    length: result["length"] as? Int ?? 0
+                    title: parseResult["title"] as? String ?? "",
+                    content: parseResult["content"] as? String ?? "",
+                    textContent: parseResult["textContent"] as? String ?? "",
+                    byline: parseResult["byline"] as? String,
+                    excerpt: parseResult["excerpt"] as? String,
+                    siteName: parseResult["siteName"] as? String,
+                    length: parseResult["length"] as? Int ?? 0
                 )
                 
                 complete(with: .success(readerResult))
             } catch {
+                print("🌐 WebView: Error during parsing:", error)
                 complete(with: .failure(SafariReaderMode.ReaderError.parsingFailed))
             }
         }
