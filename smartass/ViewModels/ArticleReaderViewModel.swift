@@ -129,29 +129,31 @@ class ArticleReaderViewModel: ObservableObject {
         """
     }
     
-    func fetchArticle(from url: String) {
-        Task {
-            print("🎯 ViewModel: Waiting for service...")
-            await serviceTask?.value
-            
-            guard let service = articleService else {
-                print("❌ ViewModel: Service initialization failed")
-                return
-            }
-            
-            print("🎯 ViewModel: Starting fetch for URL: \(url)")
-            isLoading = true
-            error = nil
-            
-            do {
-                article = try await service.fetchArticle(from: url)
-                print("✅ ViewModel: Article fetched successfully")
-            } catch {
-                print("❌ ViewModel: Error fetching article: \(error)")
-                self.error = error
-            }
-            
-            isLoading = false
+    func fetchArticle(from url: String) async {
+        print("🎯 ViewModel: Waiting for service...")
+        await serviceTask?.value
+        
+        guard let service = articleService else {
+            print("❌ ViewModel: Service initialization failed")
+            return
         }
+        
+        print("🎯 ViewModel: Starting fetch for URL: \(url)")
+        isLoading = true
+        error = nil
+        
+        do {
+            article = try await service.fetchArticle(from: url)
+            print("✅ ViewModel: Article fetched successfully")
+            if let article = article {
+                print("📝 ViewModel: Content length: \(article.content.count)")
+                print("📝 ViewModel: First 200 chars of content: \(article.content.prefix(200))")
+            }
+        } catch {
+            print("❌ ViewModel: Error fetching article: \(error)")
+            self.error = error
+        }
+        
+        isLoading = false
     }
 } 

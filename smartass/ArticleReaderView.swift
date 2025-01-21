@@ -54,10 +54,13 @@ struct ArticleReaderView: View {
                             .foregroundColor(.secondary)
                     }
                     
-                    // Use the full content instead of excerpt
-                    Text(article.textContent)
-                        .font(.body)
-                        .lineSpacing(8)
+                    // Debug print
+                    let _ = print("📝 Article content length: \(article.content.count)")
+                    let _ = print("📝 First 200 chars: \(article.content.prefix(200))")
+                    
+                    // Use ArticleContentView instead of plain text
+                    ArticleContentView(htmlContent: article.content)
+                        .frame(maxWidth: .infinity)
                 }
                 .padding()
             }
