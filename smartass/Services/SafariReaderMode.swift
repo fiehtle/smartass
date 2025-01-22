@@ -74,6 +74,7 @@ class SafariReaderMode {
             
             parse() {
                 try {
+                    console.log("Starting Readability parse");
                     // Try different content finding strategies in order
                     const article = 
                         this.findByMainContent() ||
@@ -81,6 +82,8 @@ class SafariReaderMode {
                         this.findByDynamicContent();
                     
                     if (article) {
+                        console.log("Found article content, length:", article.textContent.length);
+                        console.log("Content preview:", article.textContent.substring(0, 200));
                         return this.createResult(article);
                     }
                     
@@ -92,8 +95,16 @@ class SafariReaderMode {
             }
             
             findByMainContent() {
+                console.log("Trying findByMainContent strategy");
                 // Try common article containers and semantic HTML
                 const candidates = [
+                    // Stripe Press specific selectors
+                    this.doc.querySelector('.chapter-content'),
+                    this.doc.querySelector('.content-section'),
+                    this.doc.querySelector('.text-content'),
+                    this.doc.querySelector('.chapter-text'),
+                    this.doc.querySelector('.chapter'),
+                    // Common article containers
                     this.doc.querySelector('article'),
                     this.doc.querySelector('[role="article"]'),
                     this.doc.querySelector('main'),
@@ -103,10 +114,26 @@ class SafariReaderMode {
                     this.doc.querySelector('#content')
                 ].filter(Boolean);
                 
-                return candidates.find(this.isValidArticle.bind(this));
+                console.log("Found candidates:", candidates.length);
+                
+                // If we find multiple content sections, combine them
+                if (candidates.length > 1) {
+                    console.log("Combining multiple content sections");
+                    const container = this.doc.createElement('div');
+                    candidates.forEach(candidate => {
+                        console.log("Adding section, length:", candidate.textContent.length);
+                        container.appendChild(candidate.cloneNode(true));
+                    });
+                    return container;
+                }
+                
+                const found = candidates.find(this.isValidArticle.bind(this));
+                console.log("Found valid article:", found ? "yes" : "no");
+                return found;
             }
             
             findByTextDensity() {
+                console.log("Trying findByTextDensity strategy");
                 // Find the element with the highest text-to-markup ratio
                 const body = this.doc.body;
                 if (!body) return null;
@@ -123,6 +150,7 @@ class SafariReaderMode {
                             if (score > bestScore) {
                                 bestScore = score;
                                 bestElement = node;
+                                console.log("Found better element, score:", score, "length:", text.length);
                             }
                         }
                         Array.from(node.children).forEach(walk);
@@ -134,6 +162,7 @@ class SafariReaderMode {
             }
             
             findByDynamicContent() {
+                console.log("Trying findByDynamicContent strategy");
                 // Look for elements that might contain dynamic content
                 const candidates = [
                     // Data attributes often used for dynamic content
@@ -152,6 +181,7 @@ class SafariReaderMode {
                     })
                 ];
                 
+                console.log("Found dynamic candidates:", candidates.length);
                 return candidates.find(this.isValidArticle.bind(this));
             }
             
@@ -159,29 +189,40 @@ class SafariReaderMode {
                 if (!element) return false;
                 
                 const text = element.textContent || '';
-                if (text.length < 140) return false; // Too short
+                console.log("Validating article, text length:", text.length);
+                
+                if (text.length < 140) {
+                    console.log("Too short");
+                    return false;
+                }
                 
                 // Check text to markup ratio
                 const markup = element.innerHTML || '';
                 const textDensity = text.length / markup.length;
-                if (textDensity < 0.2) return false; // Too much markup
+                console.log("Text density:", textDensity);
+                
+                if (textDensity < 0.2) {
+                    console.log("Too much markup");
+                    return false;
+                }
                 
                 // Check text to link ratio
                 const links = element.getElementsByTagName('a');
                 const linkText = Array.from(links).reduce((acc, link) => 
                     acc + (link.textContent || '').length, 0);
                 const textRatio = linkText / text.length;
-                if (textRatio > 0.5) return false; // Too many links
+                console.log("Link ratio:", textRatio);
                 
-                // Check for common article indicators
-                const hasArticleStructure = 
-                    element.querySelector('h1, h2, h3, p') !== null ||
-                    element.matches('article, [role="article"], main, .post-content, .article-content');
+                if (textRatio > 0.5) {
+                    console.log("Too many links");
+                    return false;
+                }
                 
-                return hasArticleStructure;
+                return true;
             }
             
             createResult(article) {
+                console.log("Creating final result");
                 // Find the best title
                 const title = 
                     this.doc.querySelector('h1')?.textContent ||
@@ -189,7 +230,7 @@ class SafariReaderMode {
                     this.doc.title ||
                     'Untitled';
                 
-                return {
+                const result = {
                     title: title,
                     content: article.innerHTML,
                     textContent: article.textContent,
@@ -198,6 +239,10 @@ class SafariReaderMode {
                     siteName: this.doc.querySelector('meta[property="og:site_name"]')?.content || null,
                     length: article.textContent.length
                 };
+                
+                console.log("Final result length:", result.length);
+                console.log("Content preview:", result.textContent.substring(0, 200));
+                return result;
             }
         }
     """#

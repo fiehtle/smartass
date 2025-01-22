@@ -58,8 +58,15 @@ actor ArticleService {
         
         // Site-specific optimizations for known sources
         if let url = URL(string: urlString), let host = url.host {
+            print("📝 Processing content for host: \(host)")
             switch host {
             case "paulgraham.com":
+                print("🔍 Applying Paul Graham specific processing")
+                // Remove the title from content since it's shown in the header
+                if let titleEndRange = processed.range(of: "</h1>") {
+                    processed = String(processed[titleEndRange.upperBound...])
+                }
+                
                 // PG's site uses simple HTML with br tags for spacing
                 processed = processed.replacingOccurrences(
                     of: "<br><br>",
@@ -68,12 +75,49 @@ actor ArticleService {
                 processed = "<p>" + processed + "</p>"
                 
             case "stripe.press":
-                // Stripe Press uses modern semantic HTML but with extra elements
-                processed = processed.replacingOccurrences(
-                    of: "<div[^>]*class=\"[^\"]*chapter-content[^\"]*\"[^>]*>(.*?)</div>",
-                    with: "$1",
-                    options: .regularExpression
-                )
+                print("🔍 Applying Stripe Press specific processing")
+                // Stripe Press uses modern semantic HTML with multiple content containers
+                let stripePatterns = [
+                    // Main chapter content
+                    "<div[^>]*class=\"[^\"]*chapter-content[^\"]*\"[^>]*>(.*?)</div>",
+                    // Additional content sections
+                    "<div[^>]*class=\"[^\"]*content-section[^\"]*\"[^>]*>(.*?)</div>",
+                    // Text content blocks
+                    "<div[^>]*class=\"[^\"]*text-content[^\"]*\"[^>]*>(.*?)</div>",
+                    // Chapter text
+                    "<div[^>]*class=\"[^\"]*chapter-text[^\"]*\"[^>]*>(.*?)</div>",
+                    // Full chapter
+                    "<div[^>]*class=\"[^\"]*chapter[^\"]*\"[^>]*>(.*?)</div>",
+                    // Article blocks
+                    "<article[^>]*>(.*?)</article>"
+                ]
+                
+                print("🔍 Looking for content in \(stripePatterns.count) patterns")
+                // Collect all content from different sections
+                var allContent = ""
+                for (index, pattern) in stripePatterns.enumerated() {
+                    if let regex = try? NSRegularExpression(pattern: pattern, options: [.dotMatchesLineSeparators]) {
+                        let range = NSRange(processed.startIndex..., in: processed)
+                        let matches = regex.matches(in: processed, options: [], range: range)
+                        
+                        print("📝 Pattern \(index + 1): Found \(matches.count) matches")
+                        for (matchIndex, match) in matches.enumerated() {
+                            if let contentRange = Range(match.range(at: 1), in: processed) {
+                                let content = processed[contentRange]
+                                print("📝 Match \(matchIndex + 1) length: \(content.count)")
+                                allContent += content + "\n"
+                            }
+                        }
+                    }
+                }
+                
+                // Use collected content if found, otherwise keep original
+                if !allContent.isEmpty {
+                    print("✅ Using combined content, length: \(allContent.count)")
+                    processed = allContent
+                } else {
+                    print("⚠️ No content found in patterns, using original")
+                }
                 
             case "www.latent.space", "latent.space":
                 // Substack-specific cleanup

@@ -11,72 +11,89 @@ import SwiftUI
 struct ArticleReaderView: View {
     let articleURL: String
     @StateObject private var viewModel = ArticleReaderViewModel()
-    @Environment(\.dismiss) private var dismiss
     
     var body: some View {
         ScrollView {
             if viewModel.isLoading {
                 ProgressView()
-                    .padding()
             } else if let error = viewModel.error {
                 VStack {
                     Image(systemName: "exclamationmark.triangle")
                         .font(.largeTitle)
                         .foregroundColor(.red)
-                    Text("Failed to load article")
-                        .font(.headline)
                     Text(error.localizedDescription)
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
                 }
-                .padding()
             } else if let article = viewModel.article {
                 VStack(alignment: .leading, spacing: 16) {
-                    if let siteName = article.siteName {
-                        Text(siteName)
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                    }
-                    
                     Text(article.title)
                         .font(.title)
                         .fontWeight(.bold)
                     
                     if let author = article.author {
                         Text("By \(author)")
-                            .font(.subheadline)
                             .foregroundColor(.secondary)
                     }
                     
-                    if let readingTime = article.estimatedReadingTime {
-                        Text("\(readingTime) min read")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                    }
-                    
-                    // Debug print
-                    let _ = print("📝 Article content length: \(article.content.count)")
-                    let _ = print("📝 First 200 chars: \(article.content.prefix(200))")
-                    
-                    // Use ArticleContentView instead of plain text
-                    ArticleContentView(htmlContent: article.content)
-                        .frame(maxWidth: .infinity)
+                    HTMLContent(html: article.content)
                 }
                 .padding()
             }
         }
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button(action: {
-                    // Add sharing functionality later
-                }) {
-                    Image(systemName: "square.and.arrow.up")
-                }
-            }
-        }
         .task {
             await viewModel.fetchArticle(from: articleURL)
+        }
+    }
+}
+
+// Simple UIViewRepresentable for HTML rendering
+private struct HTMLContent: UIViewRepresentable {
+    let html: String
+    
+    func makeUIView(context: Context) -> UITextView {
+        let textView = UITextView()
+        textView.isEditable = false
+        textView.isScrollEnabled = false
+        textView.backgroundColor = .clear
+        textView.textContainerInset = .zero
+        textView.textContainer.lineFragmentPadding = 0
+        return textView
+    }
+    
+    func updateUIView(_ textView: UITextView, context: Context) {
+        let htmlTemplate = """
+        <html>
+        <head>
+        <meta name='viewport' content='width=device-width, initial-scale=1'>
+        <style>
+        body {
+            font-family: -apple-system;
+            font-size: 17px;
+            line-height: 1.6;
+            color: #333;
+            margin: 0;
+            padding: 0;
+        }
+        p { margin: 1em 0; }
+        img { max-width: 100%; height: auto; }
+        pre { overflow-x: auto; }
+        </style>
+        </head>
+        <body>
+        \(html)
+        </body>
+        </html>
+        """
+        
+        if let data = htmlTemplate.data(using: .utf8),
+           let attributedString = try? NSAttributedString(
+            data: data,
+            options: [
+                .documentType: NSAttributedString.DocumentType.html,
+                .characterEncoding: String.Encoding.utf8.rawValue
+            ],
+            documentAttributes: nil) {
+            textView.attributedText = attributedString
         }
     }
 }
