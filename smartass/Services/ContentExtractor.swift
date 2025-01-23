@@ -125,7 +125,39 @@ class ContentExtractor: NSObject, WKNavigationDelegate {
     }
     
     private func findArticleContent(in doc: Document) throws -> Element {
-        // Try to find the main article content using common patterns
+        // Special handling for Substack (including Latent Space)
+        if try isSubstackArticle(doc) {
+            // Substack articles have a consistent structure with the main content
+            // typically in an article element or div with specific classes
+            let substackSelectors = [
+                "article.post",
+                "div.post-content",
+                // Backup selectors if the above don't match
+                "div[class*=post]"
+            ]
+            
+            for selector in substackSelectors {
+                let elements = try doc.select(selector)
+                if !elements.isEmpty() {
+                    let mainContent = elements.first()!
+                    
+                    // Remove unwanted elements
+                    try mainContent.select([
+                        "div[class*=share]",         // Share buttons
+                        "button",                    // Any buttons (usually social/sharing)
+                        "div[class*=subscription]",  // Subscription prompts
+                        "div[class*=comment]",       // Comments section
+                        "div.author-bio",            // Author bio at bottom
+                        "div[class*=footer]",        // Article footer
+                        "div[class*=social]"         // Social media elements
+                    ].joined(separator: ", ")).remove()
+                    
+                    return mainContent
+                }
+            }
+        }
+        
+        // Default article content finding logic for other sites
         let articleSelectors = [
             "article",
             "[role=main]",
@@ -333,7 +365,7 @@ class ContentExtractor: NSObject, WKNavigationDelegate {
                         blocks.append(.init(
                             type: .list(ordered: element.tagName() == "ol"),
                             content: text,
-                            metadata: try getFormattingMetadata(item as! Element)
+                            metadata: try getFormattingMetadata(item)
                         ))
                     }
                 }
@@ -369,23 +401,16 @@ class ContentExtractor: NSObject, WKNavigationDelegate {
     private func getFormattingMetadata(_ element: Element) throws -> [String: String] {
         var metadata: [String: String] = [:]
         
-        // Check direct formatting
-        let tagName = element.tagName()
-        if tagName == "em" || tagName == "i" {
-            metadata["emphasis"] = "true"
-        }
-        if tagName == "strong" || tagName == "b" {
-            metadata["bold"] = "true"
-        }
-        
-        // Check for nested formatting only within the current element's direct children
-        for child in element.children() {
-            let childTag = child.tagName()
-            if childTag == "em" || childTag == "i" {
-                metadata["emphasis"] = "true"
-            }
-            if childTag == "strong" || childTag == "b" {
+        // Only apply formatting to titles and headings
+        let tagName = element.tagName().lowercased()
+        if tagName.hasPrefix("h") {
+            // Check for bold in headings
+            if try !element.select("strong, b").isEmpty() {
                 metadata["bold"] = "true"
+            }
+            // Check for emphasis in headings
+            if try !element.select("em, i").isEmpty() {
+                metadata["emphasis"] = "true"
             }
         }
         
@@ -398,6 +423,13 @@ class ContentExtractor: NSObject, WKNavigationDelegate {
             count + block.content.split(whereSeparator: \.isWhitespace).count
         }
         return (Double(totalWords) / wordsPerMinute) * 60
+    }
+    
+    private func isSubstackArticle(_ doc: Document) throws -> Bool {
+        // Check for Substack-specific elements or metadata
+        let isSubstack = try !doc.select("meta[content*=substack]").isEmpty()
+        let hasSubstackClass = try !doc.select("[class*=substack]").isEmpty()
+        return isSubstack || hasSubstackClass
     }
 }
 

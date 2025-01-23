@@ -67,12 +67,16 @@ struct URLInputView: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
                 
-                Button("Paul Graham: How to Do Great Work") {
-                    urlString = "https://paulgraham.com/greatwork.html"
+                Button("Latent Space: Enterprise Infrastructure Native") {
+                    urlString = "https://www.latent.space/p/enterprise"
                 }
                 
-                Button("Stripe Press: Working in Public") {
-                    urlString = "https://press.stripe.com/working-in-public"
+                Button("Paul Graham: The Origins of Wokeness") {
+                    urlString = "https://paulgraham.com/woke.html"
+                }
+                
+                Button("Stripe Press: Poor Charlie's Almanack") {
+                    urlString = "https://www.stripe.press/poor-charlies-almanack/talk-five"
                 }
             }
             .buttonStyle(.plain)

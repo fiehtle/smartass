@@ -56,6 +56,6 @@ struct ArticleReaderView: View {
 
 #Preview {
     NavigationStack {
-        ArticleReaderView(urlString: "https://press.stripe.com/working-in-public")
+        ArticleReaderView(urlString: "https://www.latent.space/p/enterprise")
     }
 } 
