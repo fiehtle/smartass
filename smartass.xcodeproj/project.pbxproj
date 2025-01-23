@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		3504C5752D37B808001C3EEE /* WebKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3504C5742D37B808001C3EEE /* WebKit.framework */; };
+		356FEF462D414F6200124139 /* SwiftSoup in Frameworks */ = {isa = PBXBuildFile; productRef = 356FEF452D414F6200124139 /* SwiftSoup */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -42,6 +43,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				3504C5752D37B808001C3EEE /* WebKit.framework in Frameworks */,
+				356FEF462D414F6200124139 /* SwiftSoup in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -93,6 +95,7 @@
 			);
 			name = smartass;
 			packageProductDependencies = (
+				356FEF452D414F6200124139 /* SwiftSoup */,
 			);
 			productName = smartass;
 			productReference = 3504C54A2D368C9F001C3EEE /* smartass.app */;
@@ -122,6 +125,9 @@
 			);
 			mainGroup = 3504C5412D368C9F001C3EEE;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				356FEF442D414F6200124139 /* XCRemoteSwiftPackageReference "SwiftSoup" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 3504C54B2D368C9F001C3EEE /* Products */;
 			projectDirPath = "";
@@ -356,6 +362,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		356FEF442D414F6200124139 /* XCRemoteSwiftPackageReference "SwiftSoup" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/scinfu/SwiftSoup.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.7.6;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		356FEF452D414F6200124139 /* SwiftSoup */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 356FEF442D414F6200124139 /* XCRemoteSwiftPackageReference "SwiftSoup" */;
+			productName = SwiftSoup;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 3504C5422D368C9F001C3EEE /* Project object */;
 }

@@ -9,80 +9,97 @@
 import SwiftUI
 
 struct ArticleContentView: View {
-    let content: [Article.ContentBlock]
+    let article: Article
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            ForEach(content) { block in
+            // Content blocks
+            ForEach(article.content) { block in
                 switch block.type {
                 case .heading(let level):
                     Text(block.content)
-                        .font(headingFont(for: level))
-                        .fontWeight(.bold)
-                        .padding(.top, headingPadding(for: level))
+                        .font(.system(size: headingSize(for: level), weight: .bold))
+                        .padding(.vertical, 8)
+                        .applyFormatting(metadata: block.metadata)
                     
                 case .paragraph:
                     Text(block.content)
-                        .font(.body)
+                        .font(.system(size: 16))
                         .lineSpacing(8)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .applyFormatting(metadata: block.metadata)
                     
                 case .quote:
                     Text(block.content)
+                        .font(.system(size: 16))
                         .italic()
-                        .padding(.horizontal)
+                        .padding(.leading)
                         .overlay(
                             Rectangle()
-                                .fill(Color.gray.opacity(0.2))
+                                .fill(Color.gray)
                                 .frame(width: 4)
-                                .padding(.vertical, 4),
+                                .padding(.leading),
                             alignment: .leading
                         )
+                        .applyFormatting(metadata: block.metadata)
                     
                 case .list(let ordered):
-                    if ordered {
-                        Text(block.content) // TODO: Implement ordered list
-                    } else {
-                        HStack(alignment: .top) {
-                            Text("•")
-                            Text(block.content)
+                    HStack(alignment: .top) {
+                        if ordered {
+                            Text("\u{2022}")
+                                .font(.system(size: 16))
                         }
+                        Text(block.content)
+                            .font(.system(size: 16))
+                            .applyFormatting(metadata: block.metadata)
                     }
                     
                 case .code:
                     Text(block.content)
                         .font(.system(.body, design: .monospaced))
                         .padding()
-                        .background(Color.gray.opacity(0.1))
+                        .background(Color(.systemGray6))
                         .cornerRadius(8)
                     
                 case .image(let alt):
-                    // TODO: Implement image loading
-                    if let alt = alt {
-                        Text(alt)
-                            .foregroundColor(.secondary)
+                    if let imageURL = URL(string: block.content) {
+                        AsyncImage(url: imageURL) { image in
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                        } placeholder: {
+                            Color.gray.opacity(0.2)
+                        }
+                        if let alt = alt, !alt.isEmpty {
+                            Text(alt)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
                     }
                 }
             }
         }
-        .textSelection(.enabled) // Enable text selection for copy/paste and context menu
+        .padding()
+        .frame(maxWidth: 680)
     }
     
-    private func headingFont(for level: Int) -> Font {
+    private func headingSize(for level: Int) -> CGFloat {
         switch level {
-        case 1: return .largeTitle
-        case 2: return .title
-        case 3: return .title2
-        case 4: return .title3
-        default: return .headline
+        case 1: return 32
+        case 2: return 28
+        case 3: return 24
+        case 4: return 20
+        case 5: return 18
+        case 6: return 16
+        default: return 16
         }
     }
-    
-    private func headingPadding(for level: Int) -> CGFloat {
-        switch level {
-        case 1: return 24
-        case 2: return 20
-        case 3: return 16
-        default: return 12
-        }
+}
+
+extension View {
+    func applyFormatting(metadata: [String: String]?) -> some View {
+        self
+            .italic(metadata?["emphasis"] == "true")
+            .fontWeight(metadata?["bold"] == "true" ? .bold : .regular)
     }
 } 
