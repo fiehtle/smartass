@@ -23,20 +23,20 @@ struct ArticleReaderView: View {
                 } else if let article = viewModel.article {
                     // Title
                     Text(article.title)
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
+                        .font(.title2)
+                        .fontWeight(.semibold)
                     
                     // Author
                     if let author = article.author {
                         Text("By \(author)")
-                            .font(.subheadline)
+                            .font(.body)
                             .foregroundColor(.secondary)
                     }
                     
                     // Reading time
                     if let readingTime = article.estimatedReadingTime {
                         Text("\(Int(readingTime / 60)) min read")
-                            .font(.subheadline)
+                            .font(.body)
                             .foregroundColor(.secondary)
                     }
                     

@@ -12,12 +12,50 @@ import SwiftSoup
 
 @MainActor
 class ContentExtractor: NSObject, WKNavigationDelegate {
+    // Cache compiled regex patterns
+    private static let htmlTagPattern = try! NSRegularExpression(pattern: "^\\s*<[^>]+>\\s*$", options: [])
+    private static let boilerplatePatterns: [NSRegularExpression] = {
+        let patterns = [
+            "^\\s*navigation\\s*$",
+            "^\\s*menu\\s*$",
+            "^\\s*search\\s*$",
+            "^\\s*copyright\\s*",
+            "^\\s*all\\s+rights\\s+reserved\\s*",
+            "^\\s*privacy\\s+policy\\s*",
+            "^\\s*terms\\s+of\\s+service\\s*",
+            "^\\s*skip\\s+to\\s+content\\s*$"
+        ]
+        return patterns.compactMap { pattern in
+            try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive])
+        }
+    }()
+    
+    // Cache common selectors
+    private static let substackSelectors = [
+        "article.post",
+        "div.post-content",
+        "div[class*=post]"
+    ]
+    
+    private static let authorSelectors = [
+        "[itemprop=author]",
+        "[class*=author]",
+        "[rel=author]",
+        ".byline",
+        ".meta-author"
+    ]
+    
     private var webView: WKWebView?
     private var continuations: [CheckedContinuation<String, Error>] = []
     
     func extract(from url: URL) async throws -> Article {
         // Create a new WebView for each extraction to avoid state issues
         let config = WKWebViewConfiguration()
+        // Disable JavaScript that isn't needed for content
+        config.preferences.javaScriptEnabled = true
+        config.preferences.javaScriptCanOpenWindowsAutomatically = false
+        config.defaultWebpagePreferences.allowsContentJavaScript = true
+        
         let webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 1024, height: 768), configuration: config)
         webView.navigationDelegate = self
         
@@ -49,19 +87,27 @@ class ContentExtractor: NSObject, WKNavigationDelegate {
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         Task {
             do {
-                // Wait for initial load
-                try await Task.sleep(nanoseconds: 1 * NSEC_PER_SEC)
+                // Reduced initial wait time but added check for readiness
+                try await Task.sleep(nanoseconds: 500 * NSEC_PER_MSEC)
                 
-                // Scroll multiple times to reveal all content
-                for _ in 0..<5 {
-                    _ = try await webView.evaluateJavaScript("""
-                        window.scrollTo(0, document.body.scrollHeight);
+                // More efficient scrolling - do fewer passes but scroll larger distances
+                for _ in 0..<3 {
+                    let height = try await webView.evaluateJavaScript("""
+                        window.scrollTo(0, document.body.scrollHeight * 2);
                         document.body.scrollHeight;
-                    """)
-                    try await Task.sleep(nanoseconds: 500 * NSEC_PER_MSEC)
+                    """) as? Double ?? 0
+                    
+                    // Only wait briefly between scrolls
+                    try await Task.sleep(nanoseconds: 100 * NSEC_PER_MSEC)
+                    
+                    // If we've reached the bottom, stop scrolling
+                    let scrollPos = try await webView.evaluateJavaScript("window.scrollY") as? Double ?? 0
+                    if scrollPos >= height - webView.frame.height {
+                        break
+                    }
                 }
                 
-                // Get the fully rendered HTML
+                // Get the fully rendered HTML - more targeted extraction
                 let html = try await webView.evaluateJavaScript("""
                     document.documentElement.outerHTML;
                 """) as? String ?? ""
@@ -104,16 +150,29 @@ class ContentExtractor: NSObject, WKNavigationDelegate {
         let mainContent = try findArticleContent(in: doc)
         
         // Parse the content preserving structure
-        let blocks = try parseContentStructure(mainContent)
+        var blocks = [Article.ContentBlock]()
+        blocks.reserveCapacity(50) // Pre-allocate space for typical article size
+        try parseContentStructure(mainContent, into: &blocks)
         
         // Filter out any remaining HTML tags or boilerplate
         let cleanedBlocks = blocks.filter { block in
+            let content = block.content
+            guard !content.isEmpty else { return false }
+            
+            let range = NSRange(content.startIndex..<content.endIndex, in: content)
+            
             // Skip blocks that are just HTML tags
-            !block.content.matches(regex: "^\\s*<[^>]+>\\s*$") &&
+            guard Self.htmlTagPattern.firstMatch(in: content, range: range) == nil else {
+                return false
+            }
+            
             // Skip empty or whitespace-only blocks
-            !block.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+            guard !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                return false
+            }
+            
             // Skip navigation/boilerplate text
-            !isBoilerplate(block.content)
+            return !isBoilerplate(content)
         }
         
         return Article(
@@ -125,33 +184,20 @@ class ContentExtractor: NSObject, WKNavigationDelegate {
     }
     
     private func findArticleContent(in doc: Document) throws -> Element {
-        // Special handling for Substack (including Latent Space)
         if try isSubstackArticle(doc) {
-            // Substack articles have a consistent structure with the main content
-            // typically in an article element or div with specific classes
-            let substackSelectors = [
-                "article.post",
-                "div.post-content",
-                // Backup selectors if the above don't match
-                "div[class*=post]"
-            ]
-            
-            for selector in substackSelectors {
+            for selector in Self.substackSelectors {
                 let elements = try doc.select(selector)
                 if !elements.isEmpty() {
                     let mainContent = elements.first()!
-                    
-                    // Remove unwanted elements
                     try mainContent.select([
-                        "div[class*=share]",         // Share buttons
-                        "button",                    // Any buttons (usually social/sharing)
-                        "div[class*=subscription]",  // Subscription prompts
-                        "div[class*=comment]",       // Comments section
-                        "div.author-bio",            // Author bio at bottom
-                        "div[class*=footer]",        // Article footer
-                        "div[class*=social]"         // Social media elements
+                        "div[class*=share]",
+                        "button",
+                        "div[class*=subscription]",
+                        "div[class*=comment]",
+                        "div.author-bio",
+                        "div[class*=footer]",
+                        "div[class*=social]"
                     ].joined(separator: ", ")).remove()
-                    
                     return mainContent
                 }
             }
@@ -229,20 +275,9 @@ class ContentExtractor: NSObject, WKNavigationDelegate {
     }
     
     private func isBoilerplate(_ text: String) -> Bool {
-        // Common patterns for navigation, headers, footers, etc.
-        let boilerplatePatterns = [
-            "^\\s*navigation\\s*$",
-            "^\\s*menu\\s*$",
-            "^\\s*search\\s*$",
-            "^\\s*copyright\\s*",
-            "^\\s*all\\s+rights\\s+reserved\\s*",
-            "^\\s*privacy\\s+policy\\s*",
-            "^\\s*terms\\s+of\\s+service\\s*",
-            "^\\s*skip\\s+to\\s+content\\s*$"
-        ]
-        
-        return boilerplatePatterns.contains { pattern in
-            text.matches(regex: pattern, options: [.caseInsensitive])
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        return Self.boilerplatePatterns.contains { pattern in
+            pattern.firstMatch(in: text, range: range) != nil
         }
     }
     
@@ -276,37 +311,20 @@ class ContentExtractor: NSObject, WKNavigationDelegate {
     }
     
     private func findAuthor(in doc: Document) throws -> String? {
-        // Try multiple strategies to find the author
-        
-        // 1. Look for semantic author markers
-        let authorSelectors = [
-            "[itemprop=author]",
-            "[class*=author]",
-            "[rel=author]",
-            ".byline",
-            ".meta-author"
-        ]
-        
-        for selector in authorSelectors {
+        for selector in Self.authorSelectors {
             if let author = try doc.select(selector).first() {
                 let text = try author.text().trimmingCharacters(in: .whitespacesAndNewlines)
                 if !text.isEmpty {
-                    // Clean up common author prefixes
                     return text.replacingOccurrences(of: "^[Bb]y\\s+", with: "", options: .regularExpression)
                 }
             }
         }
-        
         return nil
     }
     
-    private func parseContentStructure(_ element: Element) throws -> [Article.ContentBlock] {
-        var blocks: [Article.ContentBlock] = []
-        
+    private func parseContentStructure(_ element: Element, into blocks: inout [Article.ContentBlock]) throws {
         // Process all elements to identify structure
         try processNode(element, into: &blocks)
-        
-        return blocks
     }
     
     private func processNode(_ node: Node, into blocks: inout [Article.ContentBlock]) throws {

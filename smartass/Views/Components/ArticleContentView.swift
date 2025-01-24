@@ -11,84 +11,89 @@ import SwiftUI
 struct ArticleContentView: View {
     let article: Article
     
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Show title only once at the top
-            Text(article.title)
-                .font(.title2)
-                .fontWeight(.bold)
+    // Precompute duplicates and promotional content once
+    private var contentToDisplay: [(block: Article.ContentBlock, isDuplicate: Bool)] = []
+    
+    // Regex pattern for footnote detection - includes inline references
+    private static let footnotePattern = try! NSRegularExpression(pattern: "\\[\\d+\\]|\\[\\w+\\]|^\\d+\\.", options: [])
+    
+    init(article: Article) {
+        self.article = article
+        
+        // Create lookup set for faster duplicate detection
+        var seen = Set<String>()
+        var duplicates = Set<String>()
+        
+        // First pass - identify duplicates
+        for block in article.content {
+            let content = block.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !seen.insert(content).inserted {
+                duplicates.insert(content)
+            }
+        }
+        
+        // Create promotional phrases set for O(1) lookup
+        let promotionalPhrases: Set<String> = [
+            "Share this post", "Subscribe", "Copy link", "Facebook", "Email",
+            "Notes", "More", "Share", "Previous", "Next", "Discussion about this post",
+            "Comments", "Restacks", "Ready for more?", "© 2025", "Privacy", "Terms",
+            "Collection notice", "Start Writing", "Get the app", "Substack",
+            "min read", "Discover more from", "Continue reading", "Sign in",
+            "subscribers", "newsletter", "podcast", "highlights from"
+        ]
+        
+        // Second pass - filter content
+        contentToDisplay = article.content.compactMap { block in
+            var content = block.content.trimmingCharacters(in: .whitespacesAndNewlines)
             
-            // Show author if available
-            if let author = article.author {
-                Text(author)
-                    .font(.body)
-                    .foregroundColor(.secondary)
+            // Skip promotional content
+            guard !promotionalPhrases.contains(where: { content.localizedCaseInsensitiveContains($0) }) else {
+                return nil
             }
             
-            // Content blocks
-            ForEach(article.content, id: \.content) { block in
-                if !isPromotionalContent(block.content) && !isDuplicate(block) {
-                    switch block.type {
+            // For non-footnote blocks, clean any inline references
+            let range = NSRange(content.startIndex..<content.endIndex, in: content)
+            if Self.footnotePattern.firstMatch(in: content, range: range) == nil {
+                // Clean inline references from the content
+                content = Self.footnotePattern.stringByReplacingMatches(
+                    in: content,
+                    range: range,
+                    withTemplate: ""
+                ).trimmingCharacters(in: .whitespacesAndNewlines)
+                
+                // Skip if content becomes empty after cleaning
+                guard !content.isEmpty else { return nil }
+                
+                return (block: Article.ContentBlock(
+                    type: block.type,
+                    content: content,
+                    metadata: block.metadata
+                ), isDuplicate: duplicates.contains(content))
+            }
+            
+            // Skip complete footnote blocks
+            return nil
+        }
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ForEach(contentToDisplay, id: \.block.content) { item in
+                if !item.isDuplicate {
+                    switch item.block.type {
                     case .heading:
-                        // Skip headings that match the title
-                        if block.content != article.title {
-                            Text(block.content)
+                        if item.block.content != article.title {
+                            Text(item.block.content)
                                 .font(.title2)
-                                .fontWeight(.bold)
+                                .fontWeight(.semibold)
                         }
                     case .paragraph, .list, .quote, .code, .image:
-                        Text(block.content)
+                        Text(item.block.content)
                             .font(.body)
                     }
                 }
             }
         }
-    }
-    
-    private func isPromotionalContent(_ content: String) -> Bool {
-        let promotionalPhrases = [
-            "Share this post",
-            "Subscribe",
-            "Copy link",
-            "Facebook",
-            "Email",
-            "Notes",
-            "More",
-            "Share",
-            "Previous",
-            "Next",
-            "Discussion about this post",
-            "Comments",
-            "Restacks",
-            "Ready for more?",
-            "© 2025",
-            "Privacy",
-            "Terms",
-            "Collection notice",
-            "Start Writing",
-            "Get the app",
-            "Substack",
-            "min read",
-            "Discover more from",
-            "Continue reading",
-            "Sign in",
-            "subscribers",
-            "newsletter",
-            "podcast",
-            "highlights from"
-        ]
-        
-        return promotionalPhrases.contains { phrase in
-            content.localizedCaseInsensitiveContains(phrase)
-        }
-    }
-    
-    private func isDuplicate(_ block: Article.ContentBlock) -> Bool {
-        // Check if this block's content appears elsewhere in the article
-        let content = block.content.trimmingCharacters(in: .whitespacesAndNewlines)
-        return article.content.filter { otherBlock in
-            otherBlock.content.trimmingCharacters(in: .whitespacesAndNewlines) == content
-        }.count > 1
     }
 }
 
