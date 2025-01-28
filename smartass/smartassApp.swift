@@ -10,11 +10,14 @@ import SwiftUI
 
 @main
 struct smartassApp: App {
+    let persistenceController = PersistenceController.shared
+    
     var body: some Scene {
         WindowGroup {
             NavigationStack {
                 URLInputView()
             }
+            .environment(\.managedObjectContext, persistenceController.container.viewContext)
         }
     }
 }

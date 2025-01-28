@@ -48,13 +48,13 @@ class ContentExtractor: NSObject, WKNavigationDelegate {
     private var webView: WKWebView?
     private var continuations: [CheckedContinuation<String, Error>] = []
     
-    func extract(from url: URL) async throws -> Article {
+    func extract(from url: URL) async throws -> DisplayArticle {
         // Create a new WebView for each extraction to avoid state issues
         let config = WKWebViewConfiguration()
-        // Disable JavaScript that isn't needed for content
-        config.preferences.javaScriptEnabled = true
-        config.preferences.javaScriptCanOpenWindowsAutomatically = false
-        config.defaultWebpagePreferences.allowsContentJavaScript = true
+        // Modern way to configure JavaScript
+        let prefs = WKWebpagePreferences()
+        prefs.allowsContentJavaScript = true
+        config.defaultWebpagePreferences = prefs
         
         let webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 1024, height: 768), configuration: config)
         webView.navigationDelegate = self
@@ -139,7 +139,7 @@ class ContentExtractor: NSObject, WKNavigationDelegate {
     
     // MARK: - Content Parsing
     
-    private func parseStructuredContent(_ doc: Document) throws -> Article {
+    private func parseStructuredContent(_ doc: Document) throws -> DisplayArticle {
         // First identify the title - look for the most prominent heading
         let title = try findTitle(in: doc)
         
@@ -150,7 +150,7 @@ class ContentExtractor: NSObject, WKNavigationDelegate {
         let mainContent = try findArticleContent(in: doc)
         
         // Parse the content preserving structure
-        var blocks = [Article.ContentBlock]()
+        var blocks = [DisplayArticle.ContentBlock]()
         blocks.reserveCapacity(50) // Pre-allocate space for typical article size
         try parseContentStructure(mainContent, into: &blocks)
         
@@ -175,7 +175,7 @@ class ContentExtractor: NSObject, WKNavigationDelegate {
             return !isBoilerplate(content)
         }
         
-        return Article(
+        return DisplayArticle(
             title: title,
             author: author,
             content: cleanedBlocks,
@@ -322,12 +322,12 @@ class ContentExtractor: NSObject, WKNavigationDelegate {
         return nil
     }
     
-    private func parseContentStructure(_ element: Element, into blocks: inout [Article.ContentBlock]) throws {
+    private func parseContentStructure(_ element: Element, into blocks: inout [DisplayArticle.ContentBlock]) throws {
         // Process all elements to identify structure
         try processNode(element, into: &blocks)
     }
     
-    private func processNode(_ node: Node, into blocks: inout [Article.ContentBlock]) throws {
+    private func processNode(_ node: Node, into blocks: inout [DisplayArticle.ContentBlock]) throws {
         // Handle text nodes
         if node is TextNode {
             let text = (node as! TextNode).text()
@@ -410,7 +410,7 @@ class ContentExtractor: NSObject, WKNavigationDelegate {
         try processChildren(element, into: &blocks)
     }
     
-    private func processChildren(_ element: Element, into blocks: inout [Article.ContentBlock]) throws {
+    private func processChildren(_ element: Element, into blocks: inout [DisplayArticle.ContentBlock]) throws {
         for child in element.getChildNodes() {
             try processNode(child, into: &blocks)
         }
@@ -435,7 +435,7 @@ class ContentExtractor: NSObject, WKNavigationDelegate {
         return metadata
     }
     
-    private func estimateReadingTime(blocks: [Article.ContentBlock]) -> TimeInterval {
+    private func estimateReadingTime(blocks: [DisplayArticle.ContentBlock]) -> TimeInterval {
         let wordsPerMinute = 250.0
         let totalWords = blocks.reduce(0) { count, block in
             count + block.content.split(whereSeparator: \.isWhitespace).count

@@ -1,3 +1,11 @@
+//
+//  PersistenceController.swift
+//  smartass
+//
+//  Created by Viet Le on 1/24/25.
+//
+
+
 import CoreData
 
 struct PersistenceController {
@@ -24,18 +32,18 @@ struct PersistenceController {
     
     // MARK: - Article Operations
     
-    func saveArticle(url: String, title: String, author: String?, content: String, estimatedReadingTime: Double?) throws -> Article {
+    func saveArticle(url: String, title: String, author: String?, content: String, estimatedReadingTime: Double?) throws -> StoredArticle {
         let context = container.viewContext
         
         // Check if article already exists
-        let fetchRequest: NSFetchRequest<Article> = Article.fetchRequest()
+        let fetchRequest: NSFetchRequest<StoredArticle> = StoredArticle.fetchRequest()
         fetchRequest.predicate = NSPredicate(format: "url == %@", url)
         
         if let existingArticle = try context.fetch(fetchRequest).first {
             return existingArticle
         }
         
-        let article = Article(context: context)
+        let article = StoredArticle(context: context)
         article.id = UUID()
         article.url = url
         article.title = title
@@ -47,14 +55,14 @@ struct PersistenceController {
         return article
     }
     
-    func updateArticleInitialContext(_ article: Article, context: String) throws {
+    func updateArticleInitialContext(_ article: StoredArticle, context: String) throws {
         article.initialAIContext = context
         try container.viewContext.save()
     }
     
     // MARK: - Highlight Operations
     
-    func saveHighlight(article: Article, selectedText: String, textRange: Data) throws -> Highlight {
+    func saveHighlight(article: StoredArticle, selectedText: String, textRange: Data) throws -> Highlight {
         let context = container.viewContext
         
         let highlight = Highlight(context: context)

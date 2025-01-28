@@ -1,4 +1,13 @@
+//
+//  SmartContextSidebar.swift
+//  smartass
+//
+//  Created by Viet Le on 1/27/25.
+//
+
+
 import SwiftUI
+import CoreData
 
 struct SmartContextSidebar: View {
     @Environment(\.managedObjectContext) private var viewContext
@@ -20,7 +29,7 @@ struct SmartContextSidebar: View {
     
     var body: some View {
         GeometryReader { geometry in
-            ZStack {
+            HStack(spacing: 0) {
                 // Semi-transparent background
                 Color.black.opacity(0.3)
                     .ignoresSafeArea()
@@ -31,41 +40,37 @@ struct SmartContextSidebar: View {
                     }
                 
                 // Sidebar content
-                HStack {
-                    Spacer()
-                    VStack {
-                        // Header
-                        HStack {
-                            Text("Smart Context")
-                                .font(.headline)
-                            Spacer()
-                            Button {
-                                withAnimation {
-                                    isPresented = false
-                                }
-                            } label: {
-                                Image(systemName: "xmark.circle.fill")
-                                    .foregroundStyle(.secondary)
+                VStack(spacing: 16) {
+                    // Header
+                    HStack {
+                        Text("Smart Context")
+                            .font(.headline)
+                        Spacer()
+                        Button(action: {
+                            withAnimation {
+                                isPresented = false
+                            }
+                        }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .padding()
+                    
+                    // Highlights list
+                    ScrollView {
+                        LazyVStack(spacing: 16) {
+                            ForEach(highlights) { highlight in
+                                SmartContextCard(highlight: highlight)
                             }
                         }
                         .padding()
-                        
-                        // Smart contexts list
-                        ScrollView {
-                            LazyVStack(spacing: 16) {
-                                ForEach(highlights) { highlight in
-                                    SmartContextCard(highlight: highlight)
-                                }
-                            }
-                            .padding()
-                        }
                     }
-                    .frame(width: min(geometry.size.width * 0.8, 400))
-                    .background(.background)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .shadow(radius: 10)
                 }
-                .padding()
+                .frame(width: min(geometry.size.width * 0.8, 400))
+                .background(Color(uiColor: .systemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .shadow(radius: 10)
             }
         }
     }
@@ -73,60 +78,62 @@ struct SmartContextSidebar: View {
 
 struct SmartContextCard: View {
     @Environment(\.managedObjectContext) private var viewContext
-    let highlight: Highlight
+    @ObservedObject var highlight: Highlight
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if let smartContext = highlight.smartContext {
-                // Show the smart context
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(highlight.selectedText ?? "")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    
-                    Text(smartContext.content)
+        VStack(alignment: .leading, spacing: 12) {
+            // Selected text
+            Text(highlight.selectedText ?? "No text selected")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color.secondary.opacity(0.1))
+                .cornerRadius(8)
+            
+            // Smart context content
+            Group {
+                if let smartContext = highlight.smartContext?.content {
+                    Text(smartContext)
                         .font(.body)
-                }
-            } else {
-                // Loading state
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(highlight.selectedText ?? "")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    
+                        .onAppear {
+                            print("📱 Displaying smart context:", smartContext.prefix(50))
+                        }
+                } else {
                     HStack {
+                        Spacer()
                         ProgressView()
-                        Text("Generating context...")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .onAppear {
+                                print("⏳ Showing loading spinner for highlight:", highlight.selectedText?.prefix(50) ?? "nil")
+                            }
+                        Spacer()
                     }
+                    .frame(height: 50)
                 }
+            }
+            .animation(.default, value: highlight.smartContext != nil)
+            .onChange(of: highlight.smartContext) { newValue in
+                print("🔄 Smart context updated:", newValue?.content?.prefix(50) ?? "nil")
             }
             
             // Delete button
-            HStack {
-                Spacer()
-                Button(role: .destructive) {
-                    deleteHighlight(highlight)
-                } label: {
-                    Label("Delete", systemImage: "trash")
-                        .font(.caption)
+            Button(role: .destructive, action: {
+                withAnimation {
+                    print("🗑️ Deleting highlight:", highlight.selectedText?.prefix(50) ?? "nil")
+                    viewContext.delete(highlight)
+                    try? viewContext.save()
                 }
+            }) {
+                Label("Delete", systemImage: "trash")
+                    .foregroundColor(.red)
             }
+            .padding(.top, 8)
         }
         .padding()
-        .background(.secondary.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-    }
-    
-    private func deleteHighlight(_ highlight: Highlight) {
-        withAnimation {
-            do {
-                viewContext.delete(highlight)
-                try viewContext.save()
-            } catch {
-                print("Error deleting highlight:", error)
-            }
+        .background(Color(uiColor: .secondarySystemBackground))
+        .cornerRadius(12)
+        .onAppear {
+            print("📱 SmartContextCard appeared for highlight:", highlight.selectedText?.prefix(50) ?? "nil")
         }
     }
 } 

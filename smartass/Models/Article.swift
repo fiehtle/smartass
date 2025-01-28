@@ -1,6 +1,6 @@
 import Foundation
 
-struct Article {
+struct DisplayArticle {
     let title: String
     let author: String?
     let content: [ContentBlock]
@@ -23,7 +23,7 @@ struct Article {
     }
 }
 
-extension Article {
+extension DisplayArticle {
     var textContent: String {
         content.map { block in
             switch block.type {

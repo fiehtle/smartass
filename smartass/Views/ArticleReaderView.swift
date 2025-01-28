@@ -42,13 +42,20 @@ struct ArticleReaderView: View {
                     
                     // Content
                     ArticleContentView(article: article)
+                        .onAppear {
+                            print("📄 Article content loaded")
+                        }
                 }
             }
             .padding()
         }
         .navigationBarTitleDisplayMode(.inline)
         .task {
-            guard let url = URL(string: urlString) else { return }
+            print("🔄 Loading article from URL:", urlString)
+            guard let url = URL(string: urlString) else {
+                print("❌ Invalid URL:", urlString)
+                return
+            }
             viewModel.fetchArticle(from: url)
         }
     }
