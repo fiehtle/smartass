@@ -72,10 +72,10 @@ actor OpenAIService {
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         
         let chatRequest = ChatRequest(
-            model: "gpt-4-turbo-preview",
+            model: "gpt-4-1106-preview",
             messages: messages,
-            temperature: 0.7,
-            maxTokens: 500
+            temperature: 0.3,
+            maxTokens: 150
         )
         
         let encoder = JSONEncoder()
@@ -87,6 +87,8 @@ actor OpenAIService {
         if let jsonString = String(data: jsonData, encoding: .utf8) {
             print(jsonString)
         }
+        
+        request.timeoutInterval = 10
         
         let (data, response) = try await URLSession.shared.data(for: request)
         
@@ -112,11 +114,10 @@ actor OpenAIService {
         print("📝 Generating initial context for article:", article.title)
         
         let systemPrompt = """
-        You are a knowledgeable assistant helping to analyze an article. \
-        Provide a brief, high-level understanding of the article that will help \
-        provide context for specific passages later. Keep it concise and focus on \
-        the main themes and concepts. This will be used as background context \
-        when explaining specific highlighted passages.
+        You are an expert analyst providing insight into this article. \
+        Present a clear, well-structured overview that captures the essential ideas and context. \
+        Maintain a professional yet accessible tone, avoiding technical jargon. \
+        Keep your response concise and under 100 words.
         """
         
         let messages: [ChatMessage] = [
@@ -135,23 +136,10 @@ actor OpenAIService {
         print("📝 Generating smart context for highlight:", highlight.selectedText ?? "")
         
         let systemPrompt = """
-        You're a concise encyclopedia that explains things in clear, simple language.
-
-        For different topics:
-        - History: Include the key year/period and one significant impact
-        - Science/Tech: Explain the core idea and why it matters
-        - Biography: Note their main achievement or influence
-        - Concepts: Define it simply and give a real-world example
-        
-        Structure (2-3 short sentences total):
-        1. Clear explanation using simple words
-        2. Most relevant context based on topic type
-        
-        Style:
-        - Use everyday language
-        - Keep sentences short
-        - Avoid jargon unless essential
-        - Make it readable at a glance on mobile
+        You are a subject matter expert providing clear, insightful analysis. \
+        Explain the highlighted text with precision and clarity, integrating relevant context naturally. \
+        Maintain a professional yet accessible tone. Your response should be concise, \
+        under 50 words, and optimized for quick comprehension on mobile devices.
         """
         
         let highlightedText = highlight.selectedText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -163,7 +151,7 @@ actor OpenAIService {
                 
                 Highlighted text: \(highlightedText)
                 
-                Explain this like a clear, simple encyclopedia entry.
+                Provide a clear, professional explanation.
                 """)
         ]
         
