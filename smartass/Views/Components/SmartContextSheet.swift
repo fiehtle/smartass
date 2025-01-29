@@ -1,3 +1,11 @@
+//
+//  SmartContextSheet.swift
+//  smartass
+//
+//  Created by Viet Le on 1/29/25.
+//
+
+
 import SwiftUI
 
 struct SmartContextSheet: View {

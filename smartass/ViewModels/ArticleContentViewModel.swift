@@ -16,8 +16,9 @@ class ArticleContentViewModel: ObservableObject {
     private let persistenceController: PersistenceController
     
     @Published var storedArticle: StoredArticle?
-    @Published var showSmartContextSidebar = false
+    @Published var showSmartContextSheet = false
     @Published var isGeneratingContext = false
+    @Published var currentHighlight: (text: String, explanation: String?)?
     
     init(article: DisplayArticle,
          openAIService: OpenAIService = .shared,
@@ -53,6 +54,10 @@ class ArticleContentViewModel: ObservableObject {
         print("🎯 Starting smart context generation for text:", selectedText.prefix(50))
         isGeneratingContext = true
         
+        // Show sheet immediately with loading state
+        currentHighlight = (text: selectedText, explanation: nil)
+        showSmartContextSheet = true
+        
         do {
             // Get or create stored article if not already loaded
             if storedArticle == nil {
@@ -74,12 +79,6 @@ class ArticleContentViewModel: ObservableObject {
                 textRange: Data() // TODO: Implement text range storage
             )
             print("✅ Highlight created")
-            
-            // Show sidebar immediately
-            print("📱 Showing sidebar...")
-            withAnimation {
-                showSmartContextSidebar = true
-            }
             
             // Generate initial context if it doesn't exist
             if storedArticle.initialAIContext == nil {
@@ -104,8 +103,12 @@ class ArticleContentViewModel: ObservableObject {
             )
             print("✅ Smart context saved")
             
+            // Update the current highlight with the explanation
+            currentHighlight = (text: selectedText, explanation: smartContext)
+            
         } catch {
             print("❌ Error generating smart context:", error.localizedDescription)
+            showSmartContextSheet = false
         }
         
         isGeneratingContext = false

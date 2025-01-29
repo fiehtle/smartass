@@ -130,55 +130,55 @@ struct ArticleContentView: View {
     }
     
     var body: some View {
-        ZStack {
-            // Article content
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 16) {
-                    // Title
-                    Text(article.title)
-                        .font(.title)
-                        .fontWeight(.bold)
-                        .padding(.bottom, 8)
-                    
-                    // Author if available
-                    if let author = article.author {
-                        Text("By \(author)")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                            .padding(.bottom, 16)
-                    }
-                    
-                    // Reading time if available
-                    if let readingTime = article.estimatedReadingTime {
-                        Text("\(Int(readingTime / 60)) min read")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                            .padding(.bottom, 16)
-                    }
-                    
-                    // Content sections
-                    ForEach(combinedBlocks, id: \.id) { section in
-                        NativeTextView(
-                            attributedText: section.attributedText,
-                            onSmartContext: { selectedText in
-                                Task {
-                                    await viewModel.generateSmartContext(for: selectedText)
-                                }
-                            }
-                        )
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 16) {
+                // Title
+                Text(article.title)
+                    .font(.title)
+                    .fontWeight(.bold)
+                    .padding(.bottom, 8)
+                
+                // Author if available
+                if let author = article.author {
+                    Text("By \(author)")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .padding(.bottom, 16)
                 }
-                .padding()
+                
+                // Reading time if available
+                if let readingTime = article.estimatedReadingTime {
+                    Text("\(Int(readingTime / 60)) min read")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .padding(.bottom, 16)
+                }
+                
+                // Content sections
+                ForEach(combinedBlocks, id: \.id) { section in
+                    NativeTextView(
+                        attributedText: section.attributedText,
+                        onSmartContext: { selectedText in
+                            Task {
+                                await viewModel.generateSmartContext(for: selectedText)
+                            }
+                        }
+                    )
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
-            .onAppear {
-                print("📱 ScrollView appeared with \(combinedBlocks.count) sections")
-            }
-            
-            // Smart Context Sidebar
-            if viewModel.showSmartContextSidebar, let article = viewModel.storedArticle {
-                SmartContextSidebar(article: article, isPresented: $viewModel.showSmartContextSidebar)
-                    .transition(.move(edge: .trailing))
+            .padding()
+        }
+        .onAppear {
+            print("📱 ScrollView appeared with \(combinedBlocks.count) sections")
+        }
+        .sheet(isPresented: $viewModel.showSmartContextSheet) {
+            if let highlight = viewModel.currentHighlight {
+                SmartContextSheet(
+                    selectedText: highlight.text,
+                    explanation: highlight.explanation,
+                    isPresented: $viewModel.showSmartContextSheet
+                )
             }
         }
     }
