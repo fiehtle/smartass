@@ -8,6 +8,7 @@
 
 import SwiftUI
 import CoreData
+import UIKit
 
 private struct OpenAIServiceKey: EnvironmentKey {
     static let defaultValue: OpenAIService = OpenAIService()
@@ -20,132 +21,158 @@ extension EnvironmentValues {
     }
 }
 
+// Custom UITextView to override menu items
+class CustomTextView: UITextView {
+    var onSmartContext: ((String) -> Void)?
+    
+    override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
+        if action == #selector(copy(_:)) || action == #selector(smartContextAction) {
+            return true
+        }
+        return false
+    }
+    
+    @objc func smartContextAction() {
+        guard let selectedRange = selectedTextRange,
+              let selectedText = text(in: selectedRange)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !selectedText.isEmpty
+        else { return }
+        
+        onSmartContext?(selectedText)
+    }
+}
+
+// Native text view with selection support
+struct NativeTextView: UIViewRepresentable {
+    let attributedText: NSAttributedString
+    let onSmartContext: (String) -> Void
+    
+    func makeUIView(context: Context) -> CustomTextView {
+        let textView = CustomTextView()
+        textView.backgroundColor = .clear
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.isScrollEnabled = false
+        textView.textContainer.lineFragmentPadding = 0
+        textView.textContainerInset = .zero
+        textView.delegate = context.coordinator
+        textView.onSmartContext = onSmartContext
+        
+        // Make text view adjust to width
+        textView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        textView.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        
+        return textView
+    }
+    
+    func updateUIView(_ textView: CustomTextView, context: Context) {
+        textView.attributedText = attributedText
+        
+        // Update width to match container
+        textView.textContainer.size = CGSize(width: textView.bounds.width, height: .greatestFiniteMagnitude)
+        
+        // Resize height to fit content
+        let size = textView.sizeThatFits(CGSize(width: textView.bounds.width, height: .greatestFiniteMagnitude))
+        textView.frame.size.height = size.height
+    }
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+    
+    class Coordinator: NSObject, UITextViewDelegate {
+        func textViewDidChangeSelection(_ textView: UITextView) {
+            guard let selectedRange = textView.selectedTextRange,
+                  textView.selectedRange.location != NSNotFound && textView.selectedRange.length > 0
+            else { return }
+            
+            // Get the rect of the selection
+            let selectionRect = textView.firstRect(for: selectedRange)
+            
+            // Configure menu items
+            let menu = UIMenuController.shared
+            menu.menuItems = [
+                UIMenuItem(title: "Smart Context", action: #selector(CustomTextView.smartContextAction))
+            ]
+            
+            // Show menu at selection
+            DispatchQueue.main.async {
+                textView.becomeFirstResponder()
+                menu.showMenu(from: textView, rect: selectionRect)
+            }
+        }
+    }
+}
+
+extension UIResponder {
+    private static weak var _currentFirstResponder: UIResponder?
+    
+    static var currentFirstResponder: UIResponder? {
+        _currentFirstResponder = nil
+        UIApplication.shared.sendAction(#selector(findFirstResponder), to: nil, from: nil, for: nil)
+        return _currentFirstResponder
+    }
+    
+    @objc private func findFirstResponder() {
+        UIResponder._currentFirstResponder = self
+    }
+}
+
 struct ArticleContentView: View {
     let article: DisplayArticle
     @StateObject private var viewModel: ArticleContentViewModel
+    @Environment(\.colorScheme) private var colorScheme
     
     init(article: DisplayArticle) {
         self.article = article
         self._viewModel = StateObject(wrappedValue: ArticleContentViewModel(article: article))
+        print("📱 ArticleContentView init with \(article.content.count) blocks")
     }
     
     var body: some View {
         ZStack {
             // Article content
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    ForEach(Array(article.content.enumerated()), id: \.element.id) { _, block in
-                        switch block.type {
-                        case .paragraph:
-                            Text(block.content)
-                                .font(.body)
-                                .textSelection(.enabled)
-                                .contextMenu {
-                                    Button(action: {
-                                        UIPasteboard.general.string = block.content
-                                    }) {
-                                        Label("Copy", systemImage: "doc.on.doc")
-                                    }
-                                    
-                                    Button(action: {
-                                        Task {
-                                            await viewModel.generateSmartContext(for: block.content)
-                                        }
-                                    }) {
-                                        Label("Smart Context", systemImage: "brain")
-                                    }
-                                }
-                        case .heading(let level):
-                            Text(block.content)
-                                .font(headingFont(for: level))
-                                .fontWeight(.semibold)
-                                .textSelection(.enabled)
-                                .contextMenu {
-                                    Button(action: {
-                                        UIPasteboard.general.string = block.content
-                                    }) {
-                                        Label("Copy", systemImage: "doc.on.doc")
-                                    }
-                                    
-                                    Button(action: {
-                                        Task {
-                                            await viewModel.generateSmartContext(for: block.content)
-                                        }
-                                    }) {
-                                        Label("Smart Context", systemImage: "brain")
-                                    }
-                                }
-                        case .quote:
-                            Text(block.content)
-                                .italic()
-                                .padding(.leading)
-                                .textSelection(.enabled)
-                                .contextMenu {
-                                    Button(action: {
-                                        UIPasteboard.general.string = block.content
-                                    }) {
-                                        Label("Copy", systemImage: "doc.on.doc")
-                                    }
-                                    
-                                    Button(action: {
-                                        Task {
-                                            await viewModel.generateSmartContext(for: block.content)
-                                        }
-                                    }) {
-                                        Label("Smart Context", systemImage: "brain")
-                                    }
-                                }
-                        case .list(let ordered):
-                            Text(ordered ? "\(block.content)" : "• \(block.content)")
-                                .textSelection(.enabled)
-                                .contextMenu {
-                                    Button(action: {
-                                        UIPasteboard.general.string = block.content
-                                    }) {
-                                        Label("Copy", systemImage: "doc.on.doc")
-                                    }
-                                    
-                                    Button(action: {
-                                        Task {
-                                            await viewModel.generateSmartContext(for: block.content)
-                                        }
-                                    }) {
-                                        Label("Smart Context", systemImage: "brain")
-                                    }
-                                }
-                        case .code:
-                            Text(block.content)
-                                .font(.system(.body, design: .monospaced))
-                                .padding()
-                                .background(Color.secondary.opacity(0.1))
-                                .cornerRadius(8)
-                                .textSelection(.enabled)
-                                .contextMenu {
-                                    Button(action: {
-                                        UIPasteboard.general.string = block.content
-                                    }) {
-                                        Label("Copy", systemImage: "doc.on.doc")
-                                    }
-                                }
-                        case .image(let alt):
-                            if let url = URL(string: block.content) {
-                                AsyncImage(url: url) { image in
-                                    image
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fit)
-                                } placeholder: {
-                                    ProgressView()
-                                }
-                                if let alt = alt {
-                                    Text(alt)
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
+                LazyVStack(alignment: .leading, spacing: 16) {
+                    // Title
+                    Text(article.title)
+                        .font(.title)
+                        .fontWeight(.bold)
+                        .padding(.bottom, 8)
+                    
+                    // Author if available
+                    if let author = article.author {
+                        Text("By \(author)")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                            .padding(.bottom, 16)
+                    }
+                    
+                    // Reading time if available
+                    if let readingTime = article.estimatedReadingTime {
+                        Text("\(Int(readingTime / 60)) min read")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                            .padding(.bottom, 16)
+                    }
+                    
+                    // Content sections
+                    ForEach(combinedBlocks, id: \.id) { section in
+                        NativeTextView(
+                            attributedText: section.attributedText,
+                            onSmartContext: { selectedText in
+                                Task {
+                                    await viewModel.generateSmartContext(for: selectedText)
                                 }
                             }
-                        }
+                        )
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
                 .padding()
+            }
+            .onAppear {
+                print("📱 ScrollView appeared with \(combinedBlocks.count) sections")
             }
             
             // Smart Context Sidebar
@@ -156,9 +183,124 @@ struct ArticleContentView: View {
         }
     }
     
-    private func headingFont(for level: Int) -> Font {
+    // Combined blocks structure
+    private struct CombinedSection: Identifiable {
+        let id = UUID()
+        let attributedText: NSAttributedString
+    }
+    
+    // Combine consecutive blocks into sections
+    private var combinedBlocks: [CombinedSection] {
+        var sections: [CombinedSection] = []
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.paragraphSpacing = 12
+        paragraphStyle.lineSpacing = 6
+        
+        var currentText = NSMutableAttributedString()
+        var isFirstBlock = true
+        
+        print("🔄 Processing \(article.content.count) blocks into sections")
+        
+        for block in article.content {
+            let blockText = NSMutableAttributedString()
+            
+            // Add spacing between blocks
+            if !isFirstBlock {
+                blockText.append(NSAttributedString(string: "\n"))
+            }
+            
+            // Format based on block type
+            switch block.type {
+            case .heading(let level):
+                let font = UIFont.preferredFont(forTextStyle: headingTextStyle(for: level)).withWeight(.bold)
+                let attributes: [NSAttributedString.Key: Any] = [
+                    .font: font,
+                    .foregroundColor: UIColor { $0.userInterfaceStyle == .dark ? .white : .black },
+                    .paragraphStyle: paragraphStyle
+                ]
+                blockText.append(NSAttributedString(string: block.content, attributes: attributes))
+                
+                // Start a new section after headings
+                if !currentText.string.isEmpty {
+                    sections.append(CombinedSection(attributedText: currentText))
+                    currentText = NSMutableAttributedString()
+                    isFirstBlock = true
+                }
+                sections.append(CombinedSection(attributedText: blockText))
+                continue
+                
+            case .paragraph:
+                let attributes: [NSAttributedString.Key: Any] = [
+                    .font: UIFont.preferredFont(forTextStyle: .body),
+                    .foregroundColor: UIColor { $0.userInterfaceStyle == .dark ? .white : .black },
+                    .paragraphStyle: paragraphStyle
+                ]
+                blockText.append(NSAttributedString(string: block.content, attributes: attributes))
+                
+            case .quote:
+                let font = UIFont.preferredFont(forTextStyle: .body).withTraits(.traitItalic)
+                let attributes: [NSAttributedString.Key: Any] = [
+                    .font: font,
+                    .foregroundColor: UIColor { $0.userInterfaceStyle == .dark ? .white : .black },
+                    .paragraphStyle: paragraphStyle
+                ]
+                blockText.append(NSAttributedString(string: block.content, attributes: attributes))
+                
+            case .list(let ordered):
+                let text = ordered ? "\(block.content)" : "• \(block.content)"
+                let attributes: [NSAttributedString.Key: Any] = [
+                    .font: UIFont.preferredFont(forTextStyle: .body),
+                    .foregroundColor: UIColor { $0.userInterfaceStyle == .dark ? .white : .black },
+                    .paragraphStyle: paragraphStyle
+                ]
+                blockText.append(NSAttributedString(string: text, attributes: attributes))
+                
+            case .code:
+                // Code blocks get their own section
+                if !currentText.string.isEmpty {
+                    sections.append(CombinedSection(attributedText: currentText))
+                    currentText = NSMutableAttributedString()
+                    isFirstBlock = true
+                }
+                let codeStyle = NSMutableParagraphStyle()
+                codeStyle.paragraphSpacing = 12
+                let font = UIFont.monospacedSystemFont(ofSize: UIFont.preferredFont(forTextStyle: .body).pointSize, weight: .regular)
+                let attributes: [NSAttributedString.Key: Any] = [
+                    .font: font,
+                    .foregroundColor: UIColor { $0.userInterfaceStyle == .dark ? .white : .black },
+                    .paragraphStyle: codeStyle,
+                    .backgroundColor: UIColor.systemGray6
+                ]
+                blockText.append(NSAttributedString(string: block.content, attributes: attributes))
+                sections.append(CombinedSection(attributedText: blockText))
+                continue
+                
+            case .image:
+                // Images get their own section
+                if !currentText.string.isEmpty {
+                    sections.append(CombinedSection(attributedText: currentText))
+                    currentText = NSMutableAttributedString()
+                    isFirstBlock = true
+                }
+                continue
+            }
+            
+            currentText.append(blockText)
+            isFirstBlock = false
+        }
+        
+        // Add any remaining text
+        if !currentText.string.isEmpty {
+            sections.append(CombinedSection(attributedText: currentText))
+        }
+        
+        print("✅ Created \(sections.count) combined sections")
+        return sections
+    }
+    
+    private func headingTextStyle(for level: Int) -> UIFont.TextStyle {
         switch level {
-        case 1: return .title
+        case 1: return .title1
         case 2: return .title2
         case 3: return .title3
         default: return .headline
@@ -166,41 +308,18 @@ struct ArticleContentView: View {
     }
 }
 
-// Helper view to observe text selection
-struct TextSelectionObserver: UIViewRepresentable {
-    let onSelectionChanged: (String?) -> Void
-    
-    func makeUIView(context: Context) -> UIView {
-        let view = UIView()
-        view.backgroundColor = .clear
-        NotificationCenter.default.addObserver(
-            context.coordinator,
-            selector: #selector(Coordinator.selectionChanged),
-            name: UIMenuController.didShowMenuNotification,
-            object: nil
-        )
-        return view
+extension UIFont {
+    func withTraits(_ traits: UIFontDescriptor.SymbolicTraits) -> UIFont {
+        guard let descriptor = fontDescriptor.withSymbolicTraits(traits) else {
+            return self
+        }
+        return UIFont(descriptor: descriptor, size: 0)
     }
     
-    func updateUIView(_ uiView: UIView, context: Context) {}
-    
-    func makeCoordinator() -> Coordinator {
-        Coordinator(onSelectionChanged: onSelectionChanged)
-    }
-    
-    class Coordinator: NSObject {
-        let onSelectionChanged: (String?) -> Void
-        
-        init(onSelectionChanged: @escaping (String?) -> Void) {
-            self.onSelectionChanged = onSelectionChanged
-        }
-        
-        @objc func selectionChanged() {
-            DispatchQueue.main.async {
-                if let selectedText = UIPasteboard.general.string {
-                    self.onSelectionChanged(selectedText)
-                }
-            }
-        }
+    func withWeight(_ weight: UIFont.Weight) -> UIFont {
+        let newDescriptor = fontDescriptor.addingAttributes([.traits: [
+            UIFontDescriptor.TraitKey.weight: weight
+        ]])
+        return UIFont(descriptor: newDescriptor, size: 0)
     }
 } 
