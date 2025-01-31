@@ -1,3 +1,11 @@
+//
+//  PerplexityService.swift
+//  smartass
+//
+//  Created by Viet Le on 1/29/25.
+//
+
+
 import Foundation
 
 actor PerplexityService {
@@ -15,7 +23,7 @@ actor PerplexityService {
     enum PerplexityError: LocalizedError {
         case invalidResponse
         case apiError(String)
-        case decodingError
+        case decodingError(Error)
         
         var errorDescription: String? {
             switch self {
@@ -23,8 +31,8 @@ actor PerplexityService {
                 return "Invalid response from Perplexity"
             case .apiError(let message):
                 return "Perplexity API error: \(message)"
-            case .decodingError:
-                return "Failed to decode Perplexity response"
+            case .decodingError(let error):
+                return "Failed to decode Perplexity response: \(error.localizedDescription)"
             }
         }
     }
@@ -34,10 +42,8 @@ actor PerplexityService {
         let content: String
     }
     
-    struct Citation: Codable {
-        let url: String
-        let text: String
-    }
+    // Citations are just strings in the response
+    typealias Citation = String
     
     struct ChatRequest: Codable {
         let model: String
@@ -57,12 +63,29 @@ actor PerplexityService {
     
     struct ChatResponse: Codable {
         let id: String
-        let choices: [Choice]
+        let model: String
+        let created: Int
+        let usage: Usage
         let citations: [Citation]?
+        let object: String
+        let choices: [Choice]
+        
+        struct Usage: Codable {
+            let promptTokens: Int
+            let completionTokens: Int
+            let totalTokens: Int
+        }
         
         struct Choice: Codable {
-            let message: ChatMessage
+            let index: Int
             let finishReason: String?
+            let message: ChatMessage
+            let delta: Delta?
+            
+            struct Delta: Codable {
+                let role: String?
+                let content: String?
+            }
         }
     }
     
@@ -108,11 +131,16 @@ actor PerplexityService {
             throw PerplexityError.apiError(errorMessage)
         }
         
-        let chatResponse = try jsonDecoder.decode(ChatResponse.self, from: data)
-        return (
-            content: chatResponse.choices.first?.message.content ?? "",
-            citations: chatResponse.citations
-        )
+        do {
+            let chatResponse = try jsonDecoder.decode(ChatResponse.self, from: data)
+            return (
+                content: chatResponse.choices.first?.message.content ?? "",
+                citations: chatResponse.citations
+            )
+        } catch {
+            print("❌ Decoding error details:", error)
+            throw PerplexityError.decodingError(error)
+        }
     }
     
     func generateInitialContext(for article: DisplayArticle) async throws -> (content: String, citations: [Citation]?) {

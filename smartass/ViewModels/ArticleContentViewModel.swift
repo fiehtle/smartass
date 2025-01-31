@@ -12,19 +12,19 @@ import CoreData
 @MainActor
 class ArticleContentViewModel: ObservableObject {
     private let article: DisplayArticle
-    private let openAIService: OpenAIService
+    private let perplexityService: PerplexityService
     private let persistenceController: PersistenceController
     
     @Published var storedArticle: StoredArticle?
     @Published var showSmartContextSheet = false
     @Published var isGeneratingContext = false
-    @Published var currentHighlight: (text: String, explanation: String?)?
+    @Published var currentHighlight: (text: String, explanation: String?, citations: [PerplexityService.Citation]?)?
     
     init(article: DisplayArticle,
-         openAIService: OpenAIService = .shared,
+         perplexityService: PerplexityService = .shared,
          persistenceController: PersistenceController = .shared) {
         self.article = article
-        self.openAIService = openAIService
+        self.perplexityService = perplexityService
         self.persistenceController = persistenceController
         
         print("🏗️ Initializing ArticleContentViewModel")
@@ -37,7 +37,7 @@ class ArticleContentViewModel: ObservableObject {
                 // Generate initial context immediately if it doesn't exist
                 if let storedArticle = storedArticle, storedArticle.initialAIContext == nil {
                     print("🤖 Generating initial article context on load...")
-                    let initialContext = try await openAIService.generateInitialContext(for: article)
+                    let (initialContext, citations) = try await perplexityService.generateInitialContext(for: article)
                     try persistenceController.updateArticleInitialContext(storedArticle, context: initialContext)
                     print("✅ Initial context saved:", initialContext.prefix(100))
                 } else if let context = storedArticle?.initialAIContext {
@@ -55,7 +55,7 @@ class ArticleContentViewModel: ObservableObject {
         isGeneratingContext = true
         
         // Show sheet immediately with loading state
-        currentHighlight = (text: selectedText, explanation: nil)
+        currentHighlight = (text: selectedText, explanation: nil, citations: nil)
         showSmartContextSheet = true
         
         do {
@@ -68,6 +68,8 @@ class ArticleContentViewModel: ObservableObject {
             guard let storedArticle = storedArticle else {
                 print("❌ Failed to get or create stored article")
                 isGeneratingContext = false
+                // Don't dismiss sheet, just show error state
+                currentHighlight = (text: selectedText, explanation: "Failed to load article", citations: nil)
                 return
             }
             
@@ -83,32 +85,34 @@ class ArticleContentViewModel: ObservableObject {
             // Generate initial context if it doesn't exist
             if storedArticle.initialAIContext == nil {
                 print("🤖 Generating initial article context...")
-                let initialContext = try await openAIService.generateInitialContext(for: article)
+                let (initialContext, _) = try await perplexityService.generateInitialContext(for: article)
                 try persistenceController.updateArticleInitialContext(storedArticle, context: initialContext)
                 print("✅ Initial context saved")
             }
             
             // Generate smart context
             print("🤖 Generating smart context...")
-            let smartContext = try await openAIService.generateSmartContext(
+            let (smartContext, citations) = try await perplexityService.generateSmartContext(
                 highlight: highlight,
                 articleContent: article.textContent
             )
             
-            // Save smart context
+            // Save smart context with citations
             print("💾 Saving smart context...")
             try persistenceController.saveSmartContext(
                 highlight: highlight,
-                content: smartContext
+                content: smartContext,
+                citations: citations
             )
             print("✅ Smart context saved")
             
-            // Update the current highlight with the explanation
-            currentHighlight = (text: selectedText, explanation: smartContext)
+            // Update the current highlight with the explanation and citations
+            currentHighlight = (text: selectedText, explanation: smartContext, citations: citations)
             
         } catch {
             print("❌ Error generating smart context:", error.localizedDescription)
-            showSmartContextSheet = false
+            // Don't dismiss sheet, show error message instead
+            currentHighlight = (text: selectedText, explanation: "Error: \(error.localizedDescription)", citations: nil)
         }
         
         isGeneratingContext = false

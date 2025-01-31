@@ -7,6 +7,7 @@
 
 
 import CoreData
+import Foundation
 
 struct PersistenceController {
     static let shared = PersistenceController()
@@ -84,7 +85,7 @@ struct PersistenceController {
     
     // MARK: - Smart Context Operations
     
-    func saveSmartContext(highlight: Highlight, content: String) throws -> SmartContext {
+    func saveSmartContext(highlight: Highlight, content: String, citations: [PerplexityService.Citation]? = nil) throws -> SmartContext {
         let context = container.viewContext
         
         let smartContext = SmartContext(context: context)
@@ -92,6 +93,17 @@ struct PersistenceController {
         smartContext.content = content
         smartContext.createdAt = Date()
         smartContext.highlight = highlight
+        
+        // Save citations if provided
+        if let citations = citations {
+            for citationUrl in citations {
+                let citation = Citation(context: context)
+                citation.id = UUID()
+                citation.url = citationUrl
+                citation.text = citationUrl // For backward compatibility, we store the URL as text too
+                citation.smartContext = smartContext
+            }
+        }
         
         try context.save()
         return smartContext

@@ -7,10 +7,12 @@
 
 
 import SwiftUI
+import CoreData
 
 struct SmartContextSheet: View {
     let selectedText: String
     let explanation: String?
+    let citations: [String]?
     @Binding var isPresented: Bool
     
     var body: some View {
@@ -34,20 +36,42 @@ struct SmartContextSheet: View {
                 
                 if let explanation = explanation {
                     // Divider
-                    Divider()
+                    Rectangle()
+                        .fill(Color.secondary.opacity(0.2))
+                        .frame(height: 1)
                         .padding(.horizontal)
                     
-                    // Smart Context explanation
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Smart Context")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .foregroundColor(.secondary)
+                    // Explanation
+                    Text(explanation)
+                        .font(.system(size: 15))
+                        .padding(.horizontal)
+                    
+                    // Citations
+                    if let citations = citations, !citations.isEmpty {
+                        Rectangle()
+                            .fill(Color.secondary.opacity(0.2))
+                            .frame(height: 1)
+                            .padding(.horizontal)
                         
-                        Text(explanation)
-                            .font(.system(size: 15))
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Citations")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .foregroundColor(.secondary)
+                            
+                            ForEach(citations, id: \.self) { citation in
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Link(destination: URL(string: citation) ?? URL(string: "https://google.com")!) {
+                                        Text(citation)
+                                            .font(.system(size: 13))
+                                            .lineLimit(1)
+                                    }
+                                }
+                                .padding(.vertical, 4)
+                            }
+                        }
+                        .padding(.horizontal)
                     }
-                    .padding(.horizontal)
                 } else {
                     // Loading state
                     HStack {
@@ -57,15 +81,14 @@ struct SmartContextSheet: View {
                     }
                     .padding()
                 }
-                
-                Spacer(minLength: 20)
             }
+            .padding(.bottom)
         }
         .background(Color(uiColor: .systemBackground))
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.hidden) // We're showing our own
         .presentationBackgroundInteraction(.enabled)
-        .interactiveDismissDisabled()  // Prevent dismissal while loading
+        .interactiveDismissDisabled(explanation == nil)  // Prevent dismissal while loading
     }
 }
 
@@ -73,6 +96,7 @@ struct SmartContextSheet: View {
     SmartContextSheet(
         selectedText: "This is the selected text that will be explained",
         explanation: "Here is a detailed explanation of the selected text, providing more context and understanding. This could be a longer explanation that needs more space to be displayed properly. The sheet will adjust its height accordingly.",
+        citations: nil,
         isPresented: .constant(true)
     )
 } 

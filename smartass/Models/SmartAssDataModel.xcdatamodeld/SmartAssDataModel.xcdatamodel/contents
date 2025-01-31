@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="23507" systemVersion="24B91" minimumToolsVersion="Automatic" sourceLanguage="Swift" usedWithSwiftData="YES" userDefinedModelVersionIdentifier="">
+    <entity name="Citation" representedClassName="Citation" syncable="YES" codeGenerationType="class">
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="text" optional="YES" attributeType="String"/>
+        <attribute name="url" optional="YES" attributeType="String"/>
+        <relationship name="smartContext" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="SmartContext" inverseName="citations" inverseEntity="SmartContext"/>
+    </entity>
     <entity name="Highlight" representedClassName="Highlight" syncable="YES" codeGenerationType="class">
         <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
@@ -12,6 +18,7 @@
         <attribute name="content" optional="YES" attributeType="String"/>
         <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <relationship name="citations" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="Citation" inverseName="smartContext" inverseEntity="Citation"/>
         <relationship name="highlight" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Highlight" inverseName="smartContext" inverseEntity="Highlight"/>
     </entity>
     <entity name="StoredArticle" representedClassName=".StoredArticle" syncable="YES" codeGenerationType="class">

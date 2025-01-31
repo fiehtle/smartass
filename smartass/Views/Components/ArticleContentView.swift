@@ -81,25 +81,18 @@ struct NativeTextView: UIViewRepresentable {
     }
     
     class Coordinator: NSObject, UITextViewDelegate {
-        func textViewDidChangeSelection(_ textView: UITextView) {
-            guard let selectedRange = textView.selectedTextRange,
-                  textView.selectedRange.location != NSNotFound && textView.selectedRange.length > 0
-            else { return }
+        func textView(_ textView: UITextView, editMenuForTextIn range: NSRange, suggestedActions: [UIMenuElement]) -> UIMenu? {
+            guard range.length > 0 else { return nil }
             
-            // Get the rect of the selection
-            let selectionRect = textView.firstRect(for: selectedRange)
-            
-            // Configure menu items
-            let menu = UIMenuController.shared
-            menu.menuItems = [
-                UIMenuItem(title: "Smart Context", action: #selector(CustomTextView.smartContextAction))
-            ]
-            
-            // Show menu at selection
-            DispatchQueue.main.async {
-                textView.becomeFirstResponder()
-                menu.showMenu(from: textView, rect: selectionRect)
+            let smartContextAction = UIAction(title: "Smart Context", image: nil) { _ in
+                if let selectedText = textView.text(in: textView.selectedTextRange!)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !selectedText.isEmpty,
+                   let customTextView = textView as? CustomTextView {
+                    customTextView.onSmartContext?(selectedText)
+                }
             }
+            
+            return UIMenu(children: [smartContextAction])
         }
     }
 }
@@ -177,6 +170,7 @@ struct ArticleContentView: View {
                 SmartContextSheet(
                     selectedText: highlight.text,
                     explanation: highlight.explanation,
+                    citations: highlight.citations,
                     isPresented: $viewModel.showSmartContextSheet
                 )
             }
@@ -322,4 +316,4 @@ extension UIFont {
         ]])
         return UIFont(descriptor: newDescriptor, size: 0)
     }
-} 
+}
