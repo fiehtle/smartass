@@ -125,28 +125,6 @@ struct ArticleContentView: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 16) {
-                // Title
-                Text(article.title)
-                    .font(.title)
-                    .fontWeight(.bold)
-                    .padding(.bottom, 8)
-                
-                // Author if available
-                if let author = article.author {
-                    Text("By \(author)")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                        .padding(.bottom, 16)
-                }
-                
-                // Reading time if available
-                if let readingTime = article.estimatedReadingTime {
-                    Text("\(Int(readingTime / 60)) min read")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                        .padding(.bottom, 16)
-                }
-                
                 // Content sections
                 ForEach(combinedBlocks, id: \.id) { section in
                     NativeTextView(
@@ -160,7 +138,6 @@ struct ArticleContentView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
-            .padding()
         }
         .onAppear {
             print("📱 ScrollView appeared with \(combinedBlocks.count) sections")
@@ -192,10 +169,17 @@ struct ArticleContentView: View {
         
         var currentText = NSMutableAttributedString()
         var isFirstBlock = true
+        var hasSkippedTitle = false
         
         print("🔄 Processing \(article.content.count) blocks into sections")
         
         for block in article.content {
+            // Skip the first heading if it matches the article title
+            if !hasSkippedTitle, case .heading(_) = block.type, block.content == article.title {
+                hasSkippedTitle = true
+                continue
+            }
+            
             let blockText = NSMutableAttributedString()
             
             // Add spacing between blocks
@@ -316,4 +300,4 @@ extension UIFont {
         ]])
         return UIFont(descriptor: newDescriptor, size: 0)
     }
-}
+} 
