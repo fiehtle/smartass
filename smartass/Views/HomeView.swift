@@ -19,63 +19,43 @@ struct HomeView: View {
     
     var body: some View {
         List {
-            Section {
-                VStack(alignment: .leading, spacing: 16) {
-                    TextField("https://...", text: $viewModel.urlString)
-                        .textFieldStyle(.roundedBorder)
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.never)
-                        .keyboardType(.URL)
-                        .onChange(of: viewModel.urlString) { _, _ in
-                            viewModel.showError = false
-                        }
-                    
-                    if viewModel.showError {
-                        Text("Please enter a valid URL starting with http:// or https://")
-                            .foregroundColor(.red)
-                            .font(.caption)
-                    }
-                    
-                    Button("Read Article") {
-                        viewModel.validateAndPresentArticle()
-                    }
-                    .disabled(viewModel.urlString.isEmpty)
-                    .buttonStyle(.borderedProminent)
-                }
-                .padding(.vertical, 8)
-            } header: {
-                Text("Add New Article")
-            }
-            
-            Section {
-                ForEach(savedArticles) { article in
-                    NavigationLink(destination: ArticleReaderView(urlString: article.url ?? "")) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(article.title ?? "Untitled")
-                                .font(.headline)
-                            
+            ForEach(savedArticles) { article in
+                NavigationLink(destination: SavedArticleView(article: article)) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(article.title ?? "Untitled")
+                            .font(.body)
+                        
+                        HStack {
                             if let author = article.author {
                                 Text(author)
-                                    .font(.subheadline)
-                                    .foregroundColor(.secondary)
                             }
-                            
                             if let url = article.url {
+                                if article.author != nil {
+                                    Text("•")
+                                }
                                 Text(formatSource(url))
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
                             }
                         }
-                        .padding(.vertical, 4)
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
                     }
+                    .padding(.vertical, 2)
                 }
-            } header: {
-                Text("Saved Articles")
+            }
+            .onDelete(perform: deleteArticles)
+        }
+        .navigationTitle("Articles")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button(action: { viewModel.showAddArticle = true }) {
+                    Image(systemName: "plus")
+                }
             }
         }
-        .navigationTitle("SmartAss")
-        .navigationDestination(isPresented: $viewModel.isArticlePresented) {
-            ArticleReaderView(urlString: viewModel.urlString)
+        .sheet(isPresented: $viewModel.showAddArticle) {
+            NavigationStack {
+                AddArticleView(isPresented: $viewModel.showAddArticle)
+            }
         }
     }
     
@@ -85,5 +65,12 @@ struct HomeView: View {
             return url
         }
         return host
+    }
+    
+    private func deleteArticles(at offsets: IndexSet) {
+        withAnimation {
+            offsets.map { savedArticles[$0] }.forEach(viewContext.delete)
+            try? viewContext.save()
+        }
     }
 } 

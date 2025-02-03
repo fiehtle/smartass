@@ -1,3 +1,11 @@
+//
+//  AddArticleView.swift
+//  smartass
+//
+//  Created by Viet Le on 2/3/25.
+//
+
+
 import SwiftUI
 
 struct AddArticleView: View {

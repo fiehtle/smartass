@@ -15,7 +15,7 @@ struct smartassApp: App {
     var body: some Scene {
         WindowGroup {
             NavigationStack {
-                URLInputView()
+                HomeView()
             }
             .environment(\.managedObjectContext, persistenceController.container.viewContext)
         }
