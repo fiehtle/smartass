@@ -1,3 +1,11 @@
+//
+//  URLInputView.swift
+//  smartass
+//
+//  Created by Viet Le on 2/6/25.
+//
+
+
 import SwiftUI
 
 struct URLInputView: View {

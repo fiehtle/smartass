@@ -18,37 +18,39 @@ struct HomeView: View {
     private var savedArticles: FetchedResults<StoredArticle>
     
     var body: some View {
-        List {
-            ForEach(savedArticles) { article in
-                NavigationLink(destination: SavedArticleView(article: article)) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(article.title ?? "Untitled")
-                            .font(.body)
-                        
-                        HStack {
-                            if let author = article.author {
-                                Text(author)
-                            }
-                            if let url = article.url {
-                                if article.author != nil {
-                                    Text("•")
-                                }
-                                Text(formatSource(url))
-                            }
+        ScrollView {
+            LazyVStack(spacing: 12) {
+                ForEach(savedArticles) { article in
+                    NavigationLink(destination: SavedArticleView(article: article)) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(article.title ?? "Untitled")
+                                .font(.smartAssFont(SmartAssDesign.Typography.headline))
+                                .foregroundColor(.primary)
+                            
+                            Text(formatSource(article.url ?? ""))
+                                .font(.smartAssFont(SmartAssDesign.Typography.footnote))
+                                .foregroundColor(.secondary)
                         }
-                        .font(.footnote)
-                        .foregroundColor(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .background(Color.background)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
                     }
-                    .padding(.vertical, 2)
                 }
             }
-            .onDelete(perform: deleteArticles)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
         }
         .navigationTitle("Articles")
+        .navigationBarTitleDisplayMode(.large)
+        .background(Color.surface)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button(action: { viewModel.showAddArticle = true }) {
                     Image(systemName: "plus")
+                        .foregroundColor(Color.accent)
+                        .font(.system(size: 17, weight: .semibold))
                 }
             }
         }
@@ -65,12 +67,5 @@ struct HomeView: View {
             return url
         }
         return host
-    }
-    
-    private func deleteArticles(at offsets: IndexSet) {
-        withAnimation {
-            offsets.map { savedArticles[$0] }.forEach(viewContext.delete)
-            try? viewContext.save()
-        }
     }
 } 

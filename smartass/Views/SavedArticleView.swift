@@ -35,20 +35,20 @@ struct SavedArticleView: View {
             VStack(alignment: .leading, spacing: 16) {
                 // Title
                 Text(article.title ?? "")
-                    .font(.title)
+                    .font(SmartAssDesign.Typography.titleLarge)
                     .fontWeight(.bold)
                 
                 // Author/Source
                 if let author = article.author {
                     Text(author)
-                        .font(.subheadline)
+                        .font(SmartAssDesign.Typography.footnote)
                         .foregroundColor(.secondary)
                 }
                 
                 // Reading time
                 if article.estimatedReadingTime > 0 {
                     Text("\(Int(article.estimatedReadingTime / 60)) min read")
-                        .font(.subheadline)
+                        .font(SmartAssDesign.Typography.footnote)
                         .foregroundColor(.secondary)
                 }
                 
@@ -68,6 +68,8 @@ struct SavedArticleView: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 16)
         }
+        .background(SmartAssDesign.Colors.background)
         .navigationBarTitleDisplayMode(.inline)
+        .tint(SmartAssDesign.Colors.accent)
     }
 } 
