@@ -46,6 +46,8 @@ class CustomTextView: UITextView {
 struct NativeTextView: UIViewRepresentable {
     let attributedText: NSAttributedString
     let onSmartContext: (String) -> Void
+    let highlights: [Highlight]
+    let onHighlightTapped: (Highlight) -> Void
     
     func makeUIView(context: Context) -> CustomTextView {
         let textView = CustomTextView()
@@ -58,29 +60,58 @@ struct NativeTextView: UIViewRepresentable {
         textView.delegate = context.coordinator
         textView.onSmartContext = onSmartContext
         
-        // Make text view adjust to width
-        textView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        textView.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        // Enable link interaction
+        textView.isUserInteractionEnabled = true
+        textView.linkTextAttributes = [
+            .underlineStyle: NSUnderlineStyle.single.rawValue | NSUnderlineStyle.patternDot.rawValue,
+            .foregroundColor: UIColor.label
+        ]
         
         return textView
     }
     
     func updateUIView(_ textView: CustomTextView, context: Context) {
-        textView.attributedText = attributedText
+        // Create mutable attributed string from the base text
+        let mutableText = NSMutableAttributedString(attributedString: attributedText)
         
-        // Update width to match container
-        textView.textContainer.size = CGSize(width: textView.bounds.width, height: .greatestFiniteMagnitude)
+        // Add highlights with dotted underlines
+        for highlight in highlights {
+            if let range = findRange(of: highlight.selectedText ?? "", in: mutableText.string) {
+                // Add link attribute for the highlight
+                mutableText.addAttribute(.link, value: highlight.id?.uuidString ?? "", range: range)
+            }
+        }
         
-        // Resize height to fit content
-        let size = textView.sizeThatFits(CGSize(width: textView.bounds.width, height: .greatestFiniteMagnitude))
-        textView.frame.size.height = size.height
+        textView.attributedText = mutableText
     }
     
     func makeCoordinator() -> Coordinator {
-        Coordinator()
+        Coordinator(self)
+    }
+    
+    // Helper to find range of highlighted text
+    private func findRange(of text: String, in string: String) -> NSRange? {
+        guard let range = string.range(of: text) else { return nil }
+        return NSRange(range, in: string)
     }
     
     class Coordinator: NSObject, UITextViewDelegate {
+        var parent: NativeTextView
+        
+        init(_ parent: NativeTextView) {
+            self.parent = parent
+        }
+        
+        // Handle taps on highlighted text
+        func textView(_ textView: UITextView, shouldInteractWith URL: URL, in characterRange: NSRange, interaction: UITextItemInteraction) -> Bool {
+            if let highlightId = UUID(uuidString: URL.absoluteString),
+               let highlight = parent.highlights.first(where: { h in h.id == highlightId }) {
+                parent.onHighlightTapped(highlight)
+            }
+            return false
+        }
+        
+        // Original menu handling
         func textView(_ textView: UITextView, editMenuForTextIn range: NSRange, suggestedActions: [UIMenuElement]) -> UIMenu? {
             guard range.length > 0 else { return nil }
             
@@ -133,6 +164,12 @@ struct ArticleContentView: View {
                             Task {
                                 await viewModel.generateSmartContext(for: selectedText)
                             }
+                        },
+                        highlights: viewModel.highlights,
+                        onHighlightTapped: { highlight in
+                            Task {
+                                await viewModel.handleHighlightTapped(highlight)
+                            }
                         }
                     )
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -148,7 +185,15 @@ struct ArticleContentView: View {
                     selectedText: highlight.text,
                     explanation: highlight.explanation,
                     citations: highlight.citations,
-                    isPresented: $viewModel.showSmartContextSheet
+                    isPresented: $viewModel.showSmartContextSheet,
+                    onDelete: highlight.explanation != nil ? {
+                        // Only show delete for existing highlights (not loading state)
+                        Task {
+                            if let storedHighlight = viewModel.highlights.first(where: { h in h.selectedText == highlight.text }) {
+                                try await viewModel.deleteHighlight(storedHighlight)
+                            }
+                        }
+                    } : nil
                 )
             }
         }

@@ -18,44 +18,31 @@ struct HomeView: View {
     private var savedArticles: FetchedResults<StoredArticle>
     
     var body: some View {
-        ScrollView {
-            LazyVStack(spacing: 12) {
-                ForEach(savedArticles) { article in
-                    NavigationLink(destination: SavedArticleView(article: article)) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(article.title ?? "Untitled")
-                                .font(.smartAssFont(SmartAssDesign.Typography.headline))
-                                .foregroundColor(.primary)
-                            
-                            Text(formatSource(article.url ?? ""))
-                                .font(.smartAssFont(SmartAssDesign.Typography.footnote))
+        NavigationStack {
+            List(savedArticles) { article in
+                NavigationLink(destination: SavedArticleView(article: article)) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(article.title ?? "Untitled")
+                            .font(.headline)
+                            .foregroundColor(.primary)
+                        
+                        if let url = article.url {
+                            Text(formatSource(url))
+                                .font(.caption)
                                 .foregroundColor(.secondary)
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 12)
-                        .background(Color.background)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
                     }
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-        }
-        .navigationTitle("Articles")
-        .navigationBarTitleDisplayMode(.large)
-        .background(Color.surface)
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button(action: { viewModel.showAddArticle = true }) {
-                    Image(systemName: "plus")
-                        .foregroundColor(Color.accent)
-                        .font(.system(size: 17, weight: .semibold))
+            .navigationTitle("Articles")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: { viewModel.showAddArticle.toggle() }) {
+                        Image(systemName: "plus")
+                    }
                 }
             }
-        }
-        .sheet(isPresented: $viewModel.showAddArticle) {
-            NavigationStack {
+            .sheet(isPresented: $viewModel.showAddArticle) {
                 AddArticleView(isPresented: $viewModel.showAddArticle)
             }
         }
@@ -67,5 +54,45 @@ struct HomeView: View {
             return url
         }
         return host
+    }
+}
+
+private struct ArticleList: View {
+    let savedArticles: FetchedResults<StoredArticle>
+    
+    var body: some View {
+        ScrollView {
+            LazyVStack(spacing: 12) {
+                ForEach(savedArticles) { article in
+                    ArticleRow(article: article)
+                }
+            }
+            .padding()
+        }
+    }
+}
+
+private struct ArticleRow: View {
+    let article: StoredArticle
+    
+    var body: some View {
+        NavigationLink(destination: SavedArticleView(article: article)) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(article.title ?? "Untitled")
+                    .font(.headline)
+                    .foregroundColor(.primary)
+                
+                if let url = article.url {
+                    Text(url)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding()
+            .background(Color(.systemBackground))
+            .cornerRadius(8)
+        }
     }
 } 

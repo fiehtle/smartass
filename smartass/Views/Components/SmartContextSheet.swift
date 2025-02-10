@@ -14,6 +14,7 @@ struct SmartContextSheet: View {
     let explanation: String?
     let citations: [String]?
     @Binding var isPresented: Bool
+    let onDelete: (() -> Void)?  // Add delete callback
     
     var body: some View {
         ScrollView {
@@ -60,18 +61,32 @@ struct SmartContextSheet: View {
                                 .foregroundColor(.secondary)
                             
                             ForEach(citations, id: \.self) { citation in
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Link(destination: URL(string: citation) ?? URL(string: "https://google.com")!) {
-                                        Text(citation)
-                                            .font(.system(size: 13))
-                                            .lineLimit(1)
-                                    }
+                                Link(destination: URL(string: citation) ?? URL(string: "https://google.com")!) {
+                                    Text(citation)
+                                        .font(.system(size: 13))
+                                        .lineLimit(1)
                                 }
-                                .padding(.vertical, 4)
                             }
                         }
                         .padding(.horizontal)
                     }
+                    
+                    // Delete button
+                    if let onDelete = onDelete {
+                        Rectangle()
+                            .fill(Color.secondary.opacity(0.2))
+                            .frame(height: 1)
+                            .padding(.horizontal)
+                        
+                        Button(role: .destructive, action: {
+                            onDelete()
+                            isPresented = false
+                        }) {
+                            Label("Delete Highlight", systemImage: "trash")
+                        }
+                        .padding(.horizontal)
+                    }
+                    
                 } else {
                     // Loading state
                     HStack {
@@ -95,8 +110,9 @@ struct SmartContextSheet: View {
 #Preview {
     SmartContextSheet(
         selectedText: "This is the selected text that will be explained",
-        explanation: "Here is a detailed explanation of the selected text, providing more context and understanding. This could be a longer explanation that needs more space to be displayed properly. The sheet will adjust its height accordingly.",
+        explanation: "Here is a detailed explanation of the selected text, providing more context and understanding.",
         citations: nil,
-        isPresented: .constant(true)
+        isPresented: .constant(true),
+        onDelete: nil
     )
 } 

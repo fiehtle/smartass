@@ -19,6 +19,7 @@ class ArticleContentViewModel: ObservableObject {
     @Published var showSmartContextSheet = false
     @Published var isGeneratingContext = false
     @Published var currentHighlight: (text: String, explanation: String?, citations: [PerplexityService.Citation]?)?
+    @Published var highlights: [Highlight] = []
     
     init(article: DisplayArticle,
          perplexityService: PerplexityService = .shared,
@@ -33,6 +34,15 @@ class ArticleContentViewModel: ObservableObject {
             do {
                 storedArticle = try await getOrCreateStoredArticle()
                 print("📝 Found/Created stored article:", storedArticle?.title ?? "nil")
+                
+                // Fetch existing highlights
+                if let storedArticle = storedArticle {
+                    let fetchRequest: NSFetchRequest<Highlight> = Highlight.fetchRequest()
+                    fetchRequest.predicate = NSPredicate(format: "article == %@", storedArticle)
+                    fetchRequest.sortDescriptors = [NSSortDescriptor(keyPath: \Highlight.createdAt, ascending: true)]
+                    highlights = try persistenceController.container.viewContext.fetch(fetchRequest)
+                    print("📝 Loaded \(highlights.count) existing highlights")
+                }
                 
                 // Generate initial context immediately if it doesn't exist
                 if let storedArticle = storedArticle, storedArticle.initialAIContext == nil {
@@ -81,6 +91,12 @@ class ArticleContentViewModel: ObservableObject {
                 textRange: Data() // TODO: Implement text range storage
             )
             print("✅ Highlight created")
+            
+            // Immediately update highlights array
+            let fetchRequest: NSFetchRequest<Highlight> = Highlight.fetchRequest()
+            fetchRequest.predicate = NSPredicate(format: "article == %@", storedArticle)
+            fetchRequest.sortDescriptors = [NSSortDescriptor(keyPath: \Highlight.createdAt, ascending: true)]
+            highlights = try persistenceController.container.viewContext.fetch(fetchRequest)
             
             // Generate initial context if it doesn't exist
             if storedArticle.initialAIContext == nil {
@@ -138,5 +154,33 @@ class ArticleContentViewModel: ObservableObject {
             content: article.textContent,
             estimatedReadingTime: article.estimatedReadingTime
         )
+    }
+    
+    // Add function to handle taps on existing highlights
+    func handleHighlightTapped(_ highlight: Highlight) async {
+        guard !isGeneratingContext else { return }
+        print("🎯 Showing existing highlight:", highlight.selectedText ?? "")
+        
+        // Show the smart context sheet with existing content
+        currentHighlight = (
+            text: highlight.selectedText ?? "",
+            explanation: highlight.smartContext?.content,
+            citations: highlight.smartContext?.citations?.compactMap { ($0 as? Citation)?.url } ?? []
+        )
+        showSmartContextSheet = true
+    }
+    
+    // Add function to delete highlight
+    func deleteHighlight(_ highlight: Highlight) async throws {
+        print("🗑️ Deleting highlight:", highlight.selectedText ?? "")
+        try persistenceController.deleteHighlight(highlight)
+        
+        // Update highlights list
+        if let storedArticle = storedArticle {
+            let fetchRequest: NSFetchRequest<Highlight> = Highlight.fetchRequest()
+            fetchRequest.predicate = NSPredicate(format: "article == %@", storedArticle)
+            fetchRequest.sortDescriptors = [NSSortDescriptor(keyPath: \Highlight.createdAt, ascending: true)]
+            highlights = try persistenceController.container.viewContext.fetch(fetchRequest)
+        }
     }
 } 

@@ -170,11 +170,19 @@ actor PerplexityService {
         print("📝 Generating smart context for highlight:", highlight.selectedText ?? "")
         
         let systemPrompt = """
-        You are a subject matter expert providing clear, insightful analysis. \
-        Explain the highlighted text with precision and clarity, integrating relevant context naturally. \
-        Maintain a professional yet accessible tone. Your response should be concise, \
-        under 50 words, and optimized for quick comprehension on mobile devices. \
-        Include relevant citations to support your explanation.
+        You are an expert providing concise, encyclopedia-style explanations. Follow this structure:
+        1. Start with a clear, direct definition or explanation of the highlighted text
+        2. Add one crucial piece of context that enhances understanding
+        
+        Key requirements:
+        - Write like a concise encyclopedia entry
+        - Focus solely on explaining the highlighted text
+        - Keep response under 50 words
+        - Use clear, accessible language
+        - Include relevant citations
+        - Avoid tangential information
+        
+        The article context provided should only be used if it significantly changes or enhances the core meaning of the highlighted text.
         """
         
         let highlightedText = highlight.selectedText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -182,11 +190,11 @@ actor PerplexityService {
         let messages: [ChatMessage] = [
             .init(role: "system", content: systemPrompt),
             .init(role: "user", content: """
-                Article context: \(article.initialAIContext ?? "")
+                Explain this highlighted text in encyclopedia style: \(highlightedText)
                 
-                Highlighted text: \(highlightedText)
+                Supporting article context (only if it significantly affects the meaning): \(article.initialAIContext ?? "")
                 
-                Provide a clear, professional explanation with relevant citations.
+                Provide a focused explanation of the highlight itself, as if writing a concise encyclopedia entry.
                 """)
         ]
         

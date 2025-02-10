@@ -19,15 +19,15 @@ struct AddArticleView: View {
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
                     .keyboardType(.URL)
-                    .font(.smartAssFont(SmartAssDesign.Typography.body))
+                    .font(.body)
             } header: {
                 Text("Article URL")
-                    .font(.smartAssFont(SmartAssDesign.Typography.footnote))
+                    .font(.footnote)
             } footer: {
                 if viewModel.showError {
                     Text("Please enter a valid URL starting with http:// or https://")
                         .foregroundColor(.red)
-                        .font(.smartAssFont(SmartAssDesign.Typography.caption))
+                        .font(.caption)
                 }
             }
             
@@ -37,37 +37,32 @@ struct AddArticleView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .disabled(viewModel.urlString.isEmpty)
-                .tint(Color.accent)
-                .font(.smartAssFont(SmartAssDesign.Typography.body))
+                .font(.body)
             }
             
             Section {
                 Text("Try these examples:")
                     .foregroundColor(.secondary)
-                    .font(.smartAssFont(SmartAssDesign.Typography.footnote))
+                    .font(.footnote)
                     .listRowBackground(Color.clear)
                 
                 Button("Latent Space: Enterprise Infrastructure") {
                     viewModel.urlString = "https://www.latent.space/p/enterprise"
                 }
-                .tint(Color.accent)
-                .font(.smartAssFont(SmartAssDesign.Typography.body))
+                .font(.body)
                 
                 Button("Paul Graham: The Origins of Wokeness") {
                     viewModel.urlString = "https://paulgraham.com/woke.html"
                 }
-                .tint(Color.accent)
-                .font(.smartAssFont(SmartAssDesign.Typography.body))
+                .font(.body)
                 
                 Button("Stripe Press: Poor Charlie's Almanack") {
                     viewModel.urlString = "https://www.stripe.press/poor-charlies-almanack/talk-five"
                 }
-                .tint(Color.accent)
-                .font(.smartAssFont(SmartAssDesign.Typography.body))
+                .font(.body)
             }
         }
         .scrollContentBackground(.hidden)
-        .background(Color.background)
         .navigationTitle("Add Article")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -75,8 +70,7 @@ struct AddArticleView: View {
                 Button("Cancel") {
                     isPresented = false
                 }
-                .tint(Color.accent)
-                .font(.smartAssFont(SmartAssDesign.Typography.body))
+                .font(.body)
             }
         }
         .navigationDestination(isPresented: $viewModel.isArticlePresented) {

@@ -21,7 +21,7 @@ struct URLInputView: View {
     var body: some View {
         VStack(spacing: 20) {
             Text("Enter Article URL")
-                .font(.custom("Helvetica Neue", size: 28))
+                .font(.largeTitle)
                 .fontWeight(.bold)
             
             TextField("https://...", text: $urlString)
@@ -37,7 +37,7 @@ struct URLInputView: View {
             if showError {
                 Text("Please enter a valid URL starting with http:// or https://")
                     .foregroundColor(.red)
-                    .font(.custom("Helvetica Neue", size: 12))
+                    .font(.caption)
             }
             
             Button("Read Article") {
@@ -49,12 +49,11 @@ struct URLInputView: View {
             }
             .disabled(urlString.isEmpty)
             .buttonStyle(.borderedProminent)
-            .tint(Color.accent)
             
             // Example URLs
             VStack(alignment: .leading, spacing: 10) {
                 Text("Try these examples:")
-                    .font(.custom("Helvetica Neue", size: 13))
+                    .font(.footnote)
                     .foregroundColor(.secondary)
                 
                 Button("Latent Space: Enterprise Infrastructure") {
@@ -69,9 +68,7 @@ struct URLInputView: View {
                     urlString = "https://www.stripe.press/poor-charlies-almanack/talk-five"
                 }
             }
-            .buttonStyle(.plain)
-            .font(.custom("Helvetica Neue", size: 13))
-            .foregroundColor(Color.accent)
+            .padding(.horizontal)
         }
         .padding()
         .navigationDestination(isPresented: $isArticlePresented) {
